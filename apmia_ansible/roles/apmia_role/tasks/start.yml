@@ -1,0 +1,73 @@
+
+################# Tasks of start for windows machine ##########################################
+- name: for Windows
+  block:
+ 
+    - name: Checking whether apmia master installer script is present or not
+      win_stat:
+        path: "{{ path_win }}/apmia/APMIACtrl.bat"
+      register: st_win_script
+
+    - name: Removing apmia directory, if it is empty or master installer script not present
+      win_file:
+        state: absent
+        path: "{{ path_win }}/apmia"
+      register: removed_empty_dir
+      when: st_win_script.stat.exists == false
+
+    - name: Checking Status of apmia directory
+      win_stat:
+        path: "{{ path_win }}/apmia"
+      register: st_win_dir
+
+    - name: Calling master installer script to start apmia service
+      win_command: APMIACtrl.bat start
+      args:
+        chdir: "{{ path_win }}/apmia/"
+      register: outp_win
+      failed_when: false
+      when: st_win_script.stat.exists == true
+  when: ansible_os_family == "Windows"
+##########################################################################################################
+
+############################### Tasks of force start for Linux machine ###########################################
+- name: for linux
+  block:
+
+    - name: Checking whether apmia master installer script is present or not
+      stat:
+        path: "{{ path_linux }}/apmia/APMIACtrl.sh"
+      register: st_linux_script
+
+    - name: Removing apmia directory, if it is empty
+      file:
+        state: absent
+        path: "{{ path_linux }}/apmia"
+      register: removed_empty_dir
+      when: st_linux_script.stat.exists == false
+
+    - name: Checking status of apmia directory
+      stat:
+        path: "{{ path_linux }}/apmia"
+      register: st_linux_dir
+
+    - name: Calling apmia master installer script to start apmia service
+      command: ./APMIACtrl.sh start
+      args:
+        chdir: "{{ path_linux }}/apmia/"
+      failed_when: false
+      register: outp_linux
+      when: st_linux_script.stat.exists == true
+  when: ansible_os_family == "RedHat" or  ansible_os_family == "Suse" or ansible_os_family == "Debian" #condition check for linux machine
+  become: true # for sudo user
+##################################################################################################################################
+
+#########################################Tasks to Generate Report###################################################################
+- name: Block for Report
+  block:
+    # Generating report on behalf of jinja2 template
+    - template:
+         src: ../template/report.j2
+         dest: "{{ playbook_dir }}/report.log"
+      delegate_to: localhost
+##########################################################################################################################################

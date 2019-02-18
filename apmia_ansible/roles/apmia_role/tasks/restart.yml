@@ -1,0 +1,74 @@
+
+################# Tasks of restart for windows machine ##########################################
+- name: for Windows
+  block:
+
+    - name: Checking whether apmia master installer script present or not
+      win_stat:
+        path: "{{ path_win }}/apmia/APMIACtrl.bat"
+      register: st_win_script
+   
+    - name: Removing apmia directory, if it is empty or master installer script is not present
+      win_file:
+        state: absent
+        path: "{{ path_win }}/apmia"
+      register: removed_empty_dir
+      when: st_win_script.stat.exists == false
+
+    - name: Checking whether apmia directory present or not
+      win_stat:
+        path: "{{ path_win }}/apmia"
+      register: st_win_dir
+
+    - name: Calling master installer script to restart apmia service
+      win_command: APMIACtrl.bat restart
+      args:
+        chdir: "{{ path_win }}/apmia/"
+      register: outp_win
+      failed_when: false
+      when: st_win_script.stat.exists == true
+  when: ansible_os_family == "Windows"
+##################################################################################################
+
+################################ Tasks of restart for Linux machine ##############################
+- name: for linux
+  block:
+
+    - name: Checking whether apmia master installer script is present or not
+      stat:
+        path: "{{ path_linux }}/apmia/APMIACtrl.sh"
+      register: st_linux_script
+
+    - name: Removing apmia directory, if it is empty or master installer script is not present
+      file:
+        state: absent
+        path: "{{ path_linux }}/apmia"
+      register: removed_empty_dir
+      when: st_linux_script.stat.exists == false
+
+    - name: Checking whether apmia directory is present or not
+      stat:
+        path: "{{ path_linux }}/apmia"
+      register: st_linux_dir
+
+    - name: Calling master installer script to restart apmia service
+      command: ./APMIACtrl.sh restart
+      args:
+        chdir: "{{ path_linux }}/apmia/"
+      register: outp_linux
+      failed_when: false
+      when: st_linux_script.stat.exists == true
+  when: ansible_os_family == "RedHat" or  ansible_os_family == "Suse" or ansible_os_family == "Debian" # condition check for linux machine
+  become: true #for sudo user
+############################################################################################################
+
+###################################### Tasks to generate report #############################################
+- name: Block for Report
+  block:
+
+    # Generating report on behalf of jinja2 template
+    - template:
+         src: ../template/report.j2
+         dest: "{{ playbook_dir }}/report.log"
+      delegate_to: localhost
+###################################################################################################################

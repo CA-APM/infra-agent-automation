@@ -1,0 +1,368 @@
+
+#################### Setting essential facts need_IA_backup ##################################
+- set_fact:
+     need_IA_backup: 'no'
+  when: need_IA_backup is not defined or need_IA_backup == ""
+###############################################################################################################
+
+###### Prompt for Introscope properties values Add or Change ############
+- name: Introscope property Add or change
+  block:
+    # Ask for want to change 'agentManager.url.1' property
+    - pause:
+        prompt: "Do you want to add/change CA APM EM url ('agentManager.url.1') (Y/N) ?"
+      register: introscope_property
+      run_once: true
+      until: introscope_property.user_input|lower is search( '^yes$|^y$|^no$|^n' )
+
+    # Ask value for 'agentManager.url.1' if you select 'Yes' for above option
+    - pause:
+        prompt: "Enter value for 'agentManager.url.1' followed by port number (for example:- http://example.com:8081 or example.com:5001)"
+      register: introscope_property_agentmanager_url_1
+      run_once: true
+      when: introscope_property.user_input|lower == "yes" or introscope_property.user_input|lower == "y"
+
+    # Taking your value for 'agentManager.url.1' in a variable
+    - set_fact:
+         introscope_property_agentmanager_url_1: "{{ introscope_property_agentmanager_url_1.user_input }}"
+      when: introscope_property.user_input|lower == "yes" or introscope_property.user_input|lower == "y"
+      run_once: true
+
+####################################################################################################################################
+##################################### Ask for Extra Property Change ################################################################
+- name: Extra properties
+  block:
+    - pause:
+        prompt: "Do you want to configure other Properties i.e. aws accessKey, docker configuration etc ? (Y/N)"
+      register: introscope_property_extra
+      run_once: true
+      until: introscope_property_extra.user_input|lower is search( '^yes$|^y$|^no$|^n' )
+    - pause:
+        prompt: "Enter properties and its value with -D in format '-Dcom.ca.apm.agent.aws.accessKey=xyz' without quotes"
+      register: introscope_property_extra_value
+      run_once: true
+      when: introscope_property_extra.user_input|lower is search( '^yes$|^y$' )
+    - name: Setting introscope_property__extra_value variable
+      set_fact:
+         introscope_property_extra_value: "{{ introscope_property_extra_value.user_input }}"
+      run_once: true
+      when: introscope_property_extra.user_input|lower is search( '^yes$|^y$' )
+    - name: Setting introscope_property__extra_value variable
+      set_fact:
+         introscope_property_extra_value: ""
+      run_once: true
+      when: introscope_property_extra.user_input|lower is search( '^no$|^n$' )
+####################################################################################################################################
+
+    # Exiting from playbook, if none of property select for change
+    - block:
+        - debug:
+            msg: "You haven't select 'Yes' for any of above property for change, Exiting....."
+        - meta: end_play
+      when: introscope_property.user_input|lower is not search( '^yes$|^y$' ) and introscope_property_extra.user_input|lower is not search( '^yes$|^y$' )
+      run_once: true
+##############################################################################################################
+## Tasks for windows machine to Add or Change above Introscope property values (in file apmia/core/config/IntroscopeAgent.profile)##
+- name: For Windows
+  block:
+    # Checking whether apmia directory is present or not
+    - name: Checking whether apmia directory is present or not
+      win_stat:
+        path: "{{ path_win }}/apmia"
+      register: st_win
+
+    # Checking whether apmia directory is blank or some files are there.
+    - win_find:
+        paths: "{{ path_win }}/apmia"
+        file_type: directory
+        patterns: "*"
+      register: dir_files
+      when: st_win.stat.exists == true
+
+    - name: Removing apmia directory if it is Empty
+      win_file:
+        state: absent
+        path: "{{ path_win }}/apmia"
+      register: removed_empty_dir
+      when: st_win.stat.exists == true and dir_files.matched|int == 0
+
+    - name: Again checking status of apmia directory if it is removed 
+      win_stat:
+        path: "{{ path_win }}/apmia"
+      register: st_win_dir
+
+    - name: Checking status of master installer script
+      win_stat:
+        path: "{{ path_win }}/apmia/APMIACtrl.bat"
+      register: st_win_script
+
+    - name: Checking status of apmia service
+      win_command: APMIACtrl.bat status
+      args:
+        chdir: "{{ path_win }}\\apmia\\"
+      register: apmia_service_status
+      when: st_win_script.stat.exists == true
+
+    - name: Checking whether  IntrscopeAgent.profile file is exists or not
+      win_stat:
+        path: "{{ path_win }}\\apmia\\core\\config\\IntroscopeAgent.profile"
+      register: status_introscope_file
+    ############## Changing Introscope Properties##############################################################
+    - block:
+        - win_lineinfile:
+            path: "{{ path_win }}\\apmia\\core\\config\\IntroscopeAgent.profile"
+            regexp: '^agentManager.url.1='
+            line: "agentManager.url.1={{ introscope_property_agentmanager_url_1 }}"
+            backup: "{{ need_IA_backup }}"
+          register: agentmanager_url_1_changed
+          when: introscope_property_agentmanager_url_1.skipped is not defined and 'NOT ACTIVE' not in apmia_service_status.stdout
+
+        - lineinfile:
+            path: "{{ playbook_dir }}/msg_temp"
+            line: "{{ ansible_hostname }} 'agentManager.url.1' have changed to '{{ introscope_property_agentmanager_url_1 }}'"
+            create: yes
+          delegate_to: localhost
+          when: agentmanager_url_1_changed is defined and agentmanager_url_1_changed.skipped is not defined 
+      when: status_introscope_file.stat.exists == true and 'NOT ACTIVE' not in apmia_service_status.stdout 
+    ############################################################################################################
+    
+    ######################################## Changing Extra Property ###############################
+    - block:
+        - slurp:
+            src: "{{ path_win }}\\apmia\\conf\\wrapper.conf"
+          register: exist_environment_parameter
+        - set_fact: 
+              new_environment_parameter: "{{ introscope_property_extra_value.split() }}"
+        - set_fact:
+              new_environment_parameter: "{{ new_environment_parameter | to_nice_json }}"
+        - win_lineinfile:
+              path: "{{ path_win }}\\apmia\\conf\\wrapper.conf"
+              regexp: '^wrapper.java.additional.{{ item.0 }}='
+              line: 'wrapper.java.additional.{{ item.0 }}={{ item.1 }}'
+          with_together:
+              - [ 1, 2, 3, 4, 5 ]
+              - "{{ new_environment_parameter }}"
+          register: extra_environment_parameter_changed_1
+          when:
+            - "'wrapper.java.additional.1=' not in exist_environment_parameter['content']|b64decode"
+        - win_lineinfile:
+              path: "{{ path_win }}\\apmia\\conf\\wrapper.conf"
+              regexp: '^wrapper.java.additional.{{ item.0 }}='
+              line: 'wrapper.java.additional.{{ item.0 }}={{ item.1 }}'
+          with_together:
+              - [ 2, 3, 4, 5 ]
+              - "{{ new_environment_parameter }}"
+          register: extra_environment_parameter_changed_2
+          when:
+            #- extra_environment_parameter_changed.results[0].skipped is defined
+            - "'wrapper.java.additional.1=' in exist_environment_parameter['content']|b64decode"
+            - "'wrapper.java.additional.2=\\r' in exist_environment_parameter['content']|b64decode or 'wrapper.java.additional.2=' not in exist_environment_parameter['content']|b64decode"
+        - win_lineinfile:
+              path: "{{ path_win }}\\apmia\\conf\\wrapper.conf"
+              regexp: '^wrapper.java.additional.{{ item.0 }}='
+              line: 'wrapper.java.additional.{{ item.0 }}={{ item.1 }}'
+          with_together:
+              - [ 3, 4, 5 ]
+              - "{{ new_environment_parameter }}"
+          register: extra_environment_parameter_changed_3
+          when:
+            - "'wrapper.java.additional.1=' in exist_environment_parameter['content']|b64decode"
+            - "'wrapper.java.additional.2=' in exist_environment_parameter['content']|b64decode"
+            - "'wrapper.java.additional.2=\\r' not in exist_environment_parameter['content']|b64decode"
+            - "'wrapper.java.additional.3=\\r' in exist_environment_parameter['content']|b64decode or 'wrapper.java.additional.3=' not in exist_environment_parameter['content']|b64decode"
+        - win_lineinfile:
+              path: "{{ path_win }}\\apmia\\conf\\wrapper.conf"
+              regexp: '^wrapper.java.additional.{{ item.0 }}='
+              line: 'wrapper.java.additional.{{ item.0 }}={{ item.1 }}'
+          with_together:
+              - [ 4, 5 ]
+              - "{{ new_environment_parameter }}"
+          register: extra_environment_parameter_changed_4
+          when:
+            - "'wrapper.java.additional.1=' in exist_environment_parameter['content']|b64decode"
+            - "'wrapper.java.additional.2=' in exist_environment_parameter['content']|b64decode"
+            - "'wrapper.java.additional.3=' in exist_environment_parameter['content']|b64decode"
+            - "'wrapper.java.additional.3=\\r' not in exist_environment_parameter['content']|b64decode"
+            - "'wrapper.java.additional.4= ' in exist_environment_parameter['content']|b64decode or 'wrapper.java.additional.4=\\r' in exist_environment_parameter['content']|b64decode"
+        - win_lineinfile:
+              path: "{{ path_win }}\\apmia\\conf\\wrapper.conf"
+              regexp: '^wrapper.java.additional.{{ item.0 }}='
+              line: 'wrapper.java.additional.{{ item.0 }}={{ item.1 }}'
+          with_together:
+              - [ 5 ]
+              - "{{ new_environment_parameter[0] }}"
+          register: extra_environment_parameter_changed_5
+          when:
+            - "'wrapper.java.additional.1=' in exist_environment_parameter['content']|b64decode"
+            - "'wrapper.java.additional.2=' in exist_environment_parameter['content']|b64decode"
+            - "'wrapper.java.additional.3=' in exist_environment_parameter['content']|b64decode"
+            - "'wrapper.java.additional.3=\\r' not in exist_environment_parameter['content']|b64decode"
+            - "'wrapper.java.additional.4= ' not in exist_environment_parameter['content']|b64decode"
+            - "'wrapper.java.additional.5= ' in exist_environment_parameter['content']|b64decode or  exist_environment_parameter['content']|b64decode is search( 'wrapper.java.additional.5=$' )"
+        - win_command: APMIACtrl.bat restart
+          args:
+            chdir: "{{ path_win }}/apmia/"
+          register: extra_property_restart
+          failed_when: false
+          when: extra_environment_parameter_changed_1.changed == true or extra_environment_parameter_changed_2.changed == true or extra_environment_parameter_changed_3.changed == true or extra_environment_parameter_changed_4.changed == true or extra_environment_parameter_changed_5.changed == true
+        - lineinfile:
+            path: "{{ playbook_dir }}/msg_temp"
+            line: "{{ ansible_hostname }} Extra properties can't be set, 5 properties already set."
+            create: yes
+          delegate_to: localhost
+          #when: extra_environment_parameter_changed.changed is defined and extra_environment_parameter_changed.changed == false
+          when: extra_environment_parameter_changed_1.changed == false and extra_environment_parameter_changed_2.changed == false and extra_environment_parameter_changed_3.changed == false and extra_environment_parameter_changed_4.changed == false and  extra_environment_parameter_changed_5.changed == false
+        - lineinfile:
+            path: "{{ playbook_dir }}/msg_temp"
+            line: "{{ ansible_hostname }} Extra properties {{ introscope_property_extra_value }} have set."
+            create: yes
+          delegate_to: localhost
+          when: extra_property_restart.skipped is not defined
+             #- extra_environment_parameter_changed_1|changed or extra_environment_parameter_changed_2|changed or extra_environment_parameter_changed_3|changed or extra_environment_parameter_changed_4|changed or extra_environment_parameter_changed_5|changed
+      when: introscope_property_extra.user_input|lower is search( '^yes$|^y$' ) and apmia_service_status.skipped is not defined and 'NOT ACTIVE' not in apmia_service_status.stdout 
+############################ Print Message, if apmia not installed or apmia folder not present at location###############################
+    - lineinfile:
+         path: "{{ playbook_dir }}/msg_temp"
+         line: "{{ ansible_hostname }} apmia not installed at path '{{ path_win }}'"
+         create: yes
+      delegate_to: localhost
+      when: 
+        - introscope_property.user_input|lower is search( '^yes$|^y$' ) or introscope_property_extra.user_input|lower is search( '^yes$|^y$' )
+        - apmia_service_status.skipped is not defined
+        - "'NOT ACTIVE' in apmia_service_status.stdout"
+
+    - lineinfile:
+         path: "{{ playbook_dir }}/msg_temp"
+         line: "{{ ansible_hostname }} apmia directory is not present at path '{{ path_win }}'"
+         create: yes
+      delegate_to: localhost
+      when: 
+        - introscope_property.user_input|lower is search( '^yes$|^y$' ) or introscope_property_extra.user_input|lower is search( '^yes$|^y$' )
+        - apmia_service_status.skipped is defined
+#####################################################################################################
+
+    #  Restarting apmia service, if CA APM property changed
+    - name: Restarting APMIA
+      win_command: APMIACtrl.bat restart
+      args:
+        chdir: "{{ path_win }}/apmia/"
+      register: outp_win
+      failed_when: false
+      when: st_win_dir.stat.exists == true and status_introscope_file.stat.exists == true and 'NOT ACTIVE' not in apmia_service_status.stdout
+  when: ansible_os_family == "Windows" # condition check for windows machine
+##################################################################################################################################
+
+## Tasks for Linux machine to Add or Change above Introscope property values (in file apmia/core/config/IntroscopeAgent.profile)##
+- name: For Linux
+  block:
+    - name: Checking whether apmia directory is present or not
+      stat:
+        path: "{{ path_linux }}/apmia"
+      register: st_linux
+
+    # Checking whether apmia directory is empty or some files are there.
+    - find:
+        paths: "{{ path_linux }}/apmia"
+        file_type: directory
+        patterns: "*"
+      register: dir_files
+      when: st_linux.stat.exists == true
+
+    - name: Removing apmia directory, if it is blank
+      file:
+        state: absent
+        path: "{{ path_linux }}/apmia"
+      register: removed_empty_dir
+      when: st_linux.stat.exists == true and dir_files.matched|int == 0
+
+    - name: Checking status of apmia directory, if it is removed in previous task
+      stat:
+        path: "{{ path_linux }}/apmia"
+      register: st_linux_dir
+
+    - name: Checking whether apmia master installer script is present or not
+      stat:
+        path: "{{ path_linux }}/apmia/APMIACtrl.sh"
+      register: st_linux_script
+
+    - name: Calling master installer script to check status of apmia service
+      command: ./APMIACtrl.sh status
+      args:
+        chdir: "{{ path_linux }}/apmia/"
+      register: apmia_service_status
+      when: st_linux_script.stat.exists == true
+
+    - name: Checking whether  IntroscopeAgent.profile file present or not
+      stat:
+        path: "{{ path_linux }}/apmia/core/config/IntroscopeAgent.profile"
+      register: status_introscope_file
+    ########################### Checking apmia service status for crontab base ########################################
+
+    ############## Changing/Adding Introscope Properties##############################################################
+    - block:
+        - lineinfile:
+            path: "{{ path_linux }}/apmia/core/config/IntroscopeAgent.profile"
+            regexp: '^agentManager.url.1='
+            line: "agentManager.url.1={{ introscope_property_agentmanager_url_1 }}"
+            backup: "{{ need_IA_backup }}"
+          register: agentmanager_url_1_changed
+          when: introscope_property_agentmanager_url_1.skipped is not defined
+
+        - lineinfile:
+            path: "{{ playbook_dir }}/msg_temp"
+            line: "{{ ansible_hostname }} 'agentManager.url.1' have changed to '{{ introscope_property_agentmanager_url_1 }}'"
+            create: yes
+          delegate_to: localhost
+          when: agentmanager_url_1_changed is defined and agentmanager_url_1_changed.skipped is not defined
+      when: status_introscope_file.stat.exists == true and 'is running' in apmia_service_status.stdout
+    ############################################################################################################
+    ##### Set Extra Property as environment variable ######################
+    - block:
+        - name: Restarting APMIA with property value
+          command: ./APMIACtrl.sh restart property="{{ introscope_property_extra_value }}"
+          args:
+            chdir: "{{ path_linux }}/apmia/"
+          register: environment_restart
+          failed_when: false
+         # when: environment_changed|changed
+        - lineinfile:
+            path: "{{ playbook_dir }}/msg_temp"
+            line: "{{ ansible_hostname }} Extra properties {{ introscope_property_extra_value }} have set."
+            create: yes
+          delegate_to: localhost
+          when: environment_restart|succeeded
+      when: introscope_property_extra.user_input|lower is search( '^yes$|^y$' ) and apmia_service_status.skipped is not defined and 'is running' in apmia_service_status.stdout
+
+    ######################################################################
+############################ Print Message, if apmia not installed or apmia folder not present at location###############################
+    - lineinfile:
+         path: "{{ playbook_dir }}/msg_temp"
+         line: "{{ ansible_hostname }} apmia not installed at path '{{ path_linux }}'"
+         create: yes
+      delegate_to: localhost
+      when: 
+        - introscope_property.user_input|lower is search( '^yes$|^y$' ) or introscope_property_extra.user_input|lower is search( '^yes$|^y$' )
+        - apmia_service_status.skipped is not defined
+        - "'is running' not in apmia_service_status.stdout"
+
+    - lineinfile:
+         path: "{{ playbook_dir }}/msg_temp"
+         line: "{{ ansible_hostname }} apmia directory is not present at path '{{ path_linux }}'"
+         create: yes
+      delegate_to: localhost
+      when: 
+        - introscope_property.user_input|lower is search( '^yes$|^y$' ) or introscope_property_extra.user_input|lower is search( '^yes$|^y$' )
+        - apmia_service_status.skipped is defined
+#####################################################################################################
+
+    #  Restarting apmia service, if Introscope property changed
+    - name: Restarting APMIA
+      command: ./APMIACtrl.sh restart
+      args:
+        chdir: "{{ path_linux }}/apmia/"
+      register: outp_linux
+      failed_when: false
+      when: agentmanager_url_1_changed|changed
+  when: ansible_os_family == "RedHat" or  ansible_os_family == "Suse" or ansible_os_family == "Debian" # Condition Check for Linux machines
+  become: true # For sudo user
+#################################################################################################################################

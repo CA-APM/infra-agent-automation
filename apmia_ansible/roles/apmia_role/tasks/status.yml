@@ -1,0 +1,103 @@
+
+################# Tasks of status for windows machine ##########################################
+- name: for Windows
+  block:
+
+    - name: Checking whether apmia directory is present or not
+      win_stat:
+        path: "{{ path_win }}/apmia/APMIACtrl.bat"
+      register: st_win_script
+
+    - name: Removing apmia directory, if it is empty
+      win_file:
+        state: absent
+        path: "{{ path_win }}/apmia"
+      register: removed_empty_dir
+      when: st_win_script.stat.exists == false
+      failed_when: false
+
+    - name: Checking status of apmia directory, if it is removed in previous task
+      win_stat:
+        path: "{{ path_win }}/apmia"
+      register: st_win_dir
+
+    - name: Checking status of apmia service
+      win_command: APMIACtrl.bat status
+      args:
+        chdir: "{{ path_win }}/apmia/"
+      register: outp_win
+      when: st_win_script.stat.exists == true
+
+    # Copying forceStart_status.bat file on windows client machine to know force start status
+    - win_copy:
+         src: ../files/forceStart_status.bat
+         dest: "{{ path_win }}\\apmia\\"    
+      when: st_win_script.stat.exists == true
+
+    - name: Force start status of apmia service 
+      win_command: forceStart_status.bat
+      args:
+         chdir: "{{ path_win }}\\apmia\\"
+      register: force_start_status
+      failed_when: false
+      ignore_errors: true
+      when: st_win_script.stat.exists == true
+
+    # Setting force start status to a variable, if force start is running on client machine
+    - block:
+       - set_fact:
+            outp_win: "APMIA service status: {{ outp_win.stdout }}, \n Force Start Status: apmia running with force_start at {{ path_win }}\\apmia location. with PID: {{ force_start_status.stdout[-15:-7] }}"
+         when: outp_win is defined and outp_win.skipped is not defined and force_start_status.stdout != "" 
+       - set_fact:
+             outp_win:  {"stdout":"{{ outp_win }}"}
+         when: force_start_status.stdout != ""  
+      when: outp_win is defined and outp_win.skipped is not defined and st_win_dir.stat.exists == true
+
+    # Removing forceStart_status.bat file from client machine, after identifying force start status
+    - win_file:
+        path: "{{ path_win }}\\apmia\\forceStart_status.bat"
+        state: absent
+      when: st_win_script.stat.exists == true
+  when: ansible_os_family == "Windows" #condition check for windows machine
+##############################################################################################################
+
+############################### Tasks of force start for Linux machine ###########################################
+- name: for linux
+  block:
+    - name: Checking status of master installer script
+      stat:
+        path: "{{ path_linux }}/apmia/APMIACtrl.sh"
+      register: st_linux_script
+
+    - name: Removing apmia directory, if it is empty
+      file:
+        state: absent
+        path: "{{ path_linux }}/apmia"
+      register: removed_empty_dir
+      when: st_linux_script.stat.exists == false
+      #failed_when: false
+
+    - name: Check the status of apmia directory, if it is removed in previous task
+      stat:
+        path: "{{ path_linux }}/apmia"
+      register: st_linux_dir
+
+    - name: Calling master installer script to check status of apmia service
+      command: ./APMIACtrl.sh status
+      args:
+        chdir: "{{ path_linux }}/apmia/"
+      register: outp_linux
+      when: st_linux_script.stat.exists == true
+  when: ansible_os_family == "RedHat" or  ansible_os_family == "Suse" or ansible_os_family == "Debian" #Condition check for linux machine
+  become: true #for sudo user
+#############################################################################################################################################
+
+###############################################Tasks to generate Report######################################################################
+- name: Block for Report
+  block:
+    # Generating report on behalf of jinja2 template
+    - template:
+         src: ../template/report.j2
+         dest: "{{ playbook_dir }}/report.log"
+      delegate_to: localhost
+#########################################################################################################################################

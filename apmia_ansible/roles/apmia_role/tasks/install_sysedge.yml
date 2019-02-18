@@ -1,0 +1,406 @@
+##################################### Setting some basic facts for default directory #####################################
+- name: Setting some basic facts 
+  set_fact:
+     st_linux_dir_1: '{"failed": "False", "stat": {"exists": "False"}, "changed": "False"}'
+     st_win_dir_1: '{"failed": "False", "stat": {"exists": "False"}, "changed": "False"}'
+- name: Converting fact to nice json
+  set_fact:
+     st_linux_dir: "{{ st_linux_dir_1 | from_json }}"
+     st_win_dir: "{{ st_win_dir_1 | from_json }}"
+###########################################################################################################################
+
+################################# Setting install only option to default 'Yes' #############################################
+- name: set fact install_only to 'yes'
+  set_fact:
+     install_only: 'no'
+  when: install_only is not defined or install_only == ""
+############################################################################################################################
+
+############################################# Prompt to add Sysedge properties and it's value #####################################
+- name: Update sysedge properties
+  block:
+    - pause:
+        prompt: "Do you want to add community ? (Y/N)"
+      register: change_community_values
+      run_once: true
+    - block:
+        - pause:
+            prompt: "Enter community values name,access and address separated by space \n This entry specifies SNMPv1 access communities. \nSNMPv2 and SNMPv3 can be configured in the sysedgeV3.cf configuration file.\nSyntax:\n   <name> <access> [<addresses>]\nDescription:\n   <name>      is the community granting the defined access to the defined addresses.\n   <access>    is the type of access: 'read-write' or 'read-only'.\n   <addresses> is a space delimited list of IPv4/IPv6 addresses or hostnames (default is any address).\nExamples:\n   private read-write\n   public read-write fe80::2b0:d0ff:fe9b:7d72"
+          register: community_values
+          run_once: true
+          when: change_community_values.user_input|lower == "yes" or change_community_values.user_input|lower == "y"
+      when: change_community_values.skipped is not defined
+#############################################################################################################################
+
+############################################ Tasks for Windows for Install sysedge only #######################################
+- name: Tasks for Windows
+  block:
+
+    - name: Creating installation directory, if it is not present.
+      win_file:
+        path: "{{ path_win }}"
+        state: directory
+
+    - name: Checking whether apmia master installar script is present or not
+      win_stat:
+        path: "{{ path_win }}/apmia/APMIACtrl.bat"
+      register: st_win_script
+
+    - name: Removing apmia folder (if it is empty)
+      win_file:
+         state: absent
+         path: "{{ path_win }}\\apmia"
+      register: removed_empty_dir
+      when: st_win_script.stat.exists == false
+   
+    - name: Get zip file name
+      find:
+        paths: "roles/apmia_role/files/windows/"
+        patterns: '*.zip'
+      register: found_files
+      delegate_to: localhost
+
+    - name: Copying zip of apmia to remote machine
+      win_copy:
+        src: "{{ found_files.files[0].path }}"
+        dest: "{{ path_win }}\\"
+      register: win_copy
+      when: st_win_script.stat.exists == false and found_files.matched != 0
+
+    - name: Extracting zip of apmia to  Remote Machine
+      win_unzip:
+        src: "{{ path_win }}\\{{ found_files.files[0].path | win_basename }}"
+        dest: "{{ path_win }}\\"
+        delete_archive: yes
+      when: st_win_script.stat.exists == false and found_files.matched != 0
+
+    - name: Checking status of master installer script
+      win_stat:
+        path: "{{ path_win }}/apmia/APMIACtrl.bat"
+      register: st_win_script
+
+    - set_fact:
+         found_files: '{"matched": "1"}'
+      when: st_win_script.stat.exists == true
+    - set_fact:
+         found_files: "{{ found_files | from_json }}"
+      when: st_win_script.stat.exists == true
+
+    - name: Checking status of apmia service
+      win_command: APMIACtrl.bat status
+      args:
+        chdir: "{{ path_win }}\\apmia\\"
+      register: apmia_service_status
+      when: st_win_script.stat.exists == true
+
+    - name: Checking status of apmia directory
+      win_stat:
+        path: "{{ path_win }}\\apmia"
+      register: st_win
+      when: found_files.matched != 0
+
+    - name: Checking status of apmia service
+      win_command: APMIACtrl.bat status
+      args:
+        chdir: "{{ path_win }}\\apmia\\"
+      register: apmia_service_status
+      when: st_win_script.stat.exists == true and found_files.matched != 0
+
+   # ##########################################################################
+    - name: Checking whether apmia master installar script is present or not
+      win_stat:
+        path: "{{ path_win }}/apmia/APMIACtrl.bat"
+      register: st_win_script
+
+    - name: Calling master installar script for install sysedge
+      win_command: APMIACtrl.bat install sysedge
+      args:
+        chdir: "{{ path_win }}\\apmia\\"
+      register: outp_win
+      ignore_errors: yes
+      when: st_win_script.stat.exists == true and found_files.matched != 0
+
+    - name: Stop services if selected install only to yes
+      win_command: APMIACtrl.bat stop
+      args:
+        chdir: "{{ path_win }}\\apmia\\"
+      register: stop_sysedge_service
+      when: install_only|lower == "yes" and st_win_script.stat.exists == true and 'already installed/corrupt installation' not in outp_win.stdout and found_files.matched != 0
+
+    - name: Checking whether port folder present or not
+      win_stat:
+        path: "{{ item }}"
+      with_items:
+         - "{{ path_win }}\\apmia\\SystemEDGE\\port1691"
+         - "{{ path_win }}\\apmia\\SystemEDGE\\port1791"
+      register: status_sysedge_folder
+      when: found_files.matched != 0
+    - block:
+        #################################### Adding community value into sysedge.cf file ##############################################
+        - block:
+            - name: Update sysedge.cf
+              win_lineinfile:
+                path: "{{ path_win }}\\apmia\\SystemEDGE\\port1691\\sysedge.cf"
+                regexp: '^community '
+                line: "community {{ community_values.user_input }}"
+                backup: yes
+              register: community_values_changed_1
+              when: change_community_values.user_input|lower == "yes" or change_community_values.user_input|lower == "y" and community_values.user_input != "" and 'Host Monitoring Agent installation completed' in outp_win.stdout
+            # Print console message on Community changed
+            - block:
+                - lineinfile:
+                    path: "{{ playbook_dir }}/msg_temp"
+                    line: "{{ ansible_hostname }} Community Changed to '{{ community_values.user_input }}'"
+                    create: yes
+                  delegate_to: localhost
+                  when: community_values_changed_1 is defined and community_values_changed_1.skipped is not defined
+                - lineinfile:
+                    path: "{{ playbook_dir }}/msg_temp"
+                    line: "{{ ansible_hostname }} Community NOT Changed to '{{ community_values.user_input }}', APMIA is already installed."
+                    create: yes
+                  delegate_to: localhost
+                  when: community_values_changed_1 is defined and community_values_changed_1.skipped is defined
+              when: change_community_values.user_input|lower == "yes" or change_community_values.user_input|lower == "y"
+          when: community_values.skipped is not defined and status_sysedge_folder.results[0].stat.exists == true 
+        - block:
+            - name: Update sysedge.cf
+              win_lineinfile:
+                path: "{{ path_win }}\\apmia\\SystemEDGE\\port1791\\sysedge.cf"
+                regexp: '^community '
+                line: "community {{ community_values.user_input }}"
+                backup: yes
+              register: community_values_changed_2
+              when: community_values.user_input != "" and (change_community_values.user_input|lower == "yes" or change_community_values.user_input|lower == "y") and 'Host Monitoring Agent installation completed' in outp_win.stdout
+
+            # Print console message on community change
+            - block:
+                - lineinfile:
+                    path: "{{ playbook_dir }}/msg_temp"
+                    line: "{{ ansible_hostname }} Community Changed to '{{ community_values.user_input }}'"
+                    create: yes
+                  delegate_to: localhost
+                  when: community_values_changed_2 is defined and community_values_changed_2.skipped is not defined
+                - lineinfile:
+                    path: "{{ playbook_dir }}/msg_temp"
+                    line: "{{ ansible_hostname }} Community NOT Changed to '{{ community_values.user_input }}', APMIA is already installed."
+                    create: yes
+                  delegate_to: localhost
+                  when: community_values_changed_2 is defined and community_values_changed_2.skipped is defined
+              when: change_community_values.user_input|lower == "yes" or change_community_values.user_input|lower == "y"
+          when: community_values.skipped is not defined and status_sysedge_folder.results[1].stat.exists == true
+      when: found_files.matched != 0
+        ########################################################################################################################################
+
+    - name: Restart a service
+      win_service:
+        name: SysEDGE
+        state: restarted
+      when: community_values_changed_1.skipped is not defined or community_values_changed_2.skipped is not defined
+
+    - name: Checking status of apmia service for report
+      win_command: APMIACtrl.bat status
+      args:
+        chdir: "{{ path_win }}\\apmia\\"
+      register: outp_win | default "{{ outp_win.stdout }}"
+      when: stop_sysedge_service.skipped is not defined
+
+# Setting fact to print message
+    - set_fact:
+         outp_win: '{"stdout": "APMIA zip package is not present in directory files/windows"}'
+      when: found_files.matched == 0
+    - set_fact:
+         outp_win: "{{ outp_win | from_json }}"
+      when: found_files.matched == 0
+    - set_fact:
+         st_win_dir: '{"stat": {"exists": "True"}}'
+      when: found_files.matched == 0
+    - set_fact:
+         st_win_dir: "{{ st_win_dir | from_json }}"
+      when: found_files.matched == 0
+
+  when: ansible_os_family == "Windows" #Condition check for windows machine
+####################################################################################################################################
+
+################################################### Tasks for Linux machine for Install Sysedge ####################################
+- name: Tasks for Linux
+  block:
+   
+    - name: Creating default installation path, if it is not present
+      file:
+        path: "{{ path_linux }}"
+        state: directory
+
+    - name: Checking whether master installar script is present or not
+      stat:
+        path: "{{ path_linux }}/apmia/APMIACtrl.sh"
+      register: st_linux_script
+
+    - name: Removing apmia directory(if it is empty)
+      file:
+        state: absent
+        path: "{{ path_linux }}/apmia"
+      register: removed_empty_dir
+      when: st_linux_script.stat.exists == false     
+    # get tar.gz file name
+    - name: Get tar.gz file name
+      find:
+        paths: "roles/apmia_role/files/unix/"
+        patterns: '*.tar.gz'
+      register: found_files
+      delegate_to: localhost
+
+    - name: Extracting tar of apmia to remote machine
+      unarchive:
+        src: "{{ item }}"
+        dest: "{{ path_linux }}"
+      with_fileglob:
+         - "../files/unix/*.tar.gz"
+         - "../files/unix/*.tar"
+      when: st_linux_script.stat.exists == false or removed_empty_dir.changed == true and found_files.matched != 0
+
+    - name: Checking whether master installar script is present or not
+      stat:
+        path: "{{ path_linux }}/apmia/APMIACtrl.sh"
+      register: st_linux_script
+
+    - set_fact:
+         found_files: '{"matched": "1"}'
+      when: st_linux_script.stat.exists == true
+    - set_fact:
+         found_files: "{{ found_files | from_json }}"
+      when: st_linux_script.stat.exists == true
+
+    - name: Calling master installer script to check status of apmia service
+      command: ./APMIACtrl.sh status
+      args:
+        chdir: "{{ path_linux }}/apmia/"
+      register: apmia_service_status
+      when: st_linux_script.stat.exists == true
+
+    - name: Checking whether master installar script is present or not
+      stat:
+        path: "{{ path_linux }}/apmia/APMIACtrl.sh"
+      register: st_linux_script
+
+    - name: Calling master installer script to install sysedge only
+      command: ./APMIACtrl.sh install sysedge
+      args:
+        chdir: "{{ path_linux }}/apmia/"
+      register: outp_linux
+      when: st_linux_script.stat.exists == true
+      failed_when: false
+
+    - name: stop services, if selected install only to 'yes'
+      command: ./APMIACtrl.sh stop
+      args:
+        chdir: "{{ path_linux }}/apmia/"
+      register: stop_sysedge_service
+      when: install_only|lower == "yes" and st_linux_script.stat.exists == true and ('APMIA is already installed' not in outp_linux.stdout or 'force_start is not supported with sysedge only enabled' not in outp_linux.stdout)
+
+    - name: Checking whether port folder is present or not
+      stat:
+        path: "{{ item }}"
+      with_items:
+         - "{{ path_linux }}/apmia/SystemEDGE/config/port1691"
+         - "{{ path_linux }}/apmia/SystemEDGE/config/port1791"
+      register: status_sysedge_folder
+      when: found_files.matched != 0
+    - block:
+        ############################ Adding community value to sysedge.cf file ######################################
+        - block:
+            - name: Update sysedge.cf
+              lineinfile:
+                path: "{{ path_linux }}/apmia/SystemEDGE/config/port1691/sysedge.cf"
+                regexp: '^community '
+                line: "community {{ community_values.user_input }}"
+                backup: yes
+              register: community_values_changed_1
+              when: community_values.user_input != "" and change_community_values.user_input|lower == "yes" or change_community_values.user_input|lower == "y" and 'Installing Host Monitoring Agent on PORT' in outp_linux.stdout
+
+            # Print message on community changed
+            - block:
+                - lineinfile:
+                    path: "{{ playbook_dir }}/msg_temp"
+                    line: "{{ ansible_hostname }} Community Changed to '{{ community_values.user_input }}'"
+                    create: yes
+                  delegate_to: localhost
+                  when: community_values_changed_1 is defined and community_values_changed_1.skipped is not defined
+                - lineinfile:
+                    path: "{{ playbook_dir }}/msg_temp"
+                    line: "{{ ansible_hostname }} Community NOT Changed to '{{ community_values.user_input }}', APMIA is already installed."
+                    create: yes
+                  delegate_to: localhost
+                  when: community_values_changed_1 is defined and community_values_changed_1.skipped is defined
+              when: change_community_values.user_input|lower == "yes" or change_community_values.user_input|lower == "y"
+          when: community_values.skipped is not defined and status_sysedge_folder.results[0].stat.exists == true
+        - block:
+            - name: Update sysedge.cf
+              lineinfile:
+                path: "{{ path_linux }}/apmia/SystemEDGE/config/port1791/sysedge.cf"
+                regexp: '^community '
+                line: "community {{ community_values.user_input }}"
+                backup: yes
+              register: community_values_changed_2
+              when: community_values.user_input != "" and change_community_values.user_input|lower == "yes" or change_community_values.user_input|lower == "y" and 'Installing Host Monitoring Agent on PORT' in outp_linux.stdout
+
+            # Print message on community changed
+            - block:
+                - lineinfile:
+                    path: "{{ playbook_dir }}/msg_temp"
+                    line: "{{ ansible_hostname }} community have changed to '{{ community_values.user_input }}'"
+                    create: yes
+                  delegate_to: localhost
+                  when: community_values_changed_2 is defined and community_values_changed_2.skipped is not defined
+                - lineinfile:
+                    path: "{{ playbook_dir }}/msg_temp"
+                    line: "{{ ansible_hostname }} Community NOT Changed to '{{ community_values.user_input }}', APMIA is already installed."
+                    create: yes
+                  delegate_to: localhost
+                  when: community_values_changed_2 is defined and community_values_changed_2.skipped is defined
+              when: change_community_values.user_input|lower == "yes" or change_community_values.user_input|lower == "y"
+          when: community_values.skipped is not defined and status_sysedge_folder.results[1].stat.exists == true
+      when: found_files.matched != 0
+       #####################################################################################################################################
+    - name: Calling master installer script to restart apmia service, if community value is changed.
+      block:
+        - command: ./APMIACtrl.sh restart
+          args:
+            chdir: "{{ path_linux }}/apmia/"
+          register: apmia_restarted
+          ignore_errors: yes
+          when: community_values_changed_1.skipped is not defined or community_values_changed_2.skipped is not defined
+      when: st_linux_script.stat.exists == true and stop_sysedge_service.skipped is defined
+
+    - name: Checking Status of apmia service for report
+      command: ./APMIACtrl.sh status
+      args:
+        chdir: "{{ path_linux }}/apmia/"
+      register: outp_linux | default "{{ outp_linux }}"
+      ignore_errors: yes
+      when: st_linux_script.stat.exists == true and stop_sysedge_service.skipped is not defined
+    - set_fact:
+         outp_linux: '{"stdout": "APMIA tar.gz/tar package is not present in directory files/unix"}'
+      when: found_files.matched == 0
+    - set_fact:
+         outp_linux: "{{ outp_linux | from_json }}"
+      when: found_files.matched == 0
+    - set_fact:
+         st_linux_dir: '{"stat": {"exists": "True"}}'
+      when: found_files.matched == 0
+    - set_fact:
+         st_linux_dir: "{{ st_linux_dir | from_json }}"
+      when: found_files.matched == 0
+
+  when: ansible_os_family == "RedHat" or  ansible_os_family == "Suse" or ansible_os_family == "Debian" #Condition check for linux machine
+  become: true # for sudo user
+######################################################################################################
+
+############################# Tasks for Report########################################################
+- name: Block for Report
+  block:
+    # Generating report on behalf of jinja2 template
+    - template:
+         src: ../template/report.j2
+         dest: "{{ playbook_dir }}/report.log"
+      delegate_to: localhost
+###############################################################################################################

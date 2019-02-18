@@ -1,0 +1,94 @@
+########### Setting essential facts :linux directory status and windows directory status ###########
+- set_fact:
+     st_linux_dir: '{"failed": "False", "stat": {"exists": "False"}, "changed": "False"}'
+     st_win_dir: '{"failed": "False", "stat": {"exists": "False"}, "changed": "False"}'
+- set_fact:
+     st_win_dir: "{{ st_win_dir | from_json }}"
+     st_linux_dir: "{{ st_linux_dir | from_json }}"
+#################################################################################################
+
+#################### Clean Uninstall tasks for Windows ##################################### 
+- name: Tasks for Windows
+  block:
+
+    - name: Checking whether apmia directory is present or not at specified location
+      win_stat:
+        path: "{{ path_win }}\\apmia"
+      register: st_win_dir
+
+    - name: Calling master installer script for clean uninstall
+      win_command: APMIACtrl.bat clean_uninstall
+      args:
+        chdir: "{{ path_win }}\\apmia\\"
+      register: outp_win
+      ignore_errors: yes
+      when: st_win_dir.stat.exists == true
+    - block:
+        - name: Removing apmia folder after Clean uninstall
+          win_file:
+            path: "{{ path_win }}\\apmia\\"
+            state: absent
+          ignore_errors: yes
+          when: "'not installed/corrupt installation is present/APM' not in outp_win.stdout"
+      when: st_win_dir.stat.exists == true
+  when: ansible_os_family == "Windows" # Condition Check for windows
+#################################################################################################
+
+######################## Clean Uninstall tasks for Linux ##################################
+- name: Tasks for Linux
+  block:
+
+    - name: Checking Status of apmia directory
+      stat:
+        path: "{{ path_linux }}/apmia"
+      register: st_linux_dir
+
+    # Checking whether apmia folder is empty or not
+    - find:
+        paths: "{{ path_linux }}/apmia"
+        file_type: directory
+        patterns: "*"
+      register: dir_files
+      when: st_linux_dir.stat.exists == true
+
+    - name: Removing apmia Directory if it is Empty
+      file:
+        state: absent
+        path: "{{ path_linux }}/apmia"
+      register: removed_empty_dir
+      when: st_linux_dir.stat.exists == true and dir_files.matched|int == 0
+
+    - name: Again Checking status of apmia directory if blank apmia directory removed
+      stat:
+        path: "{{ path_linux }}/apmia"
+      register: st_linux_dir
+
+    - name: Calling master script for Clean Uninstall
+      command: ./APMIACtrl.sh clean_uninstall
+      args:
+        chdir: "{{ path_linux }}/apmia/"
+      register: outp_linux
+      ignore_errors: yes
+      failed_when: false
+      when: st_linux_dir.stat.exists == true
+
+    - block:
+        - name: Removing apmia folder after Clean Uninstall
+          file:
+            path: "{{ path_linux }}/apmia/"
+            state: absent
+          when: outp_linux | succeeded
+      when: st_linux_dir.stat.exists == true
+
+  when: ansible_os_family == "RedHat" or ansible_os_family == "Suse" or ansible_os_family == "Debian" # condition check only for RedHat, Suse or Debian
+  become: true #This option is for sudo user
+##############################################################################################################
+
+################################## Tasks for Report for Clean Uninstall #####################################
+- name: Block for Report
+  block:
+    - template:
+         src: ../template/report.j2
+         dest: "{{ playbook_dir }}/report.log"
+      delegate_to: localhost
+#############################################################################################################

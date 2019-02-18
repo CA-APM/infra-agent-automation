@@ -1,0 +1,136 @@
+
+################# Tasks of force_stop for windows machine ##########################################
+- name: Tasks for Windows
+  block:
+
+    - name: Checking whether apmia directory is present or not
+      win_stat:
+        path: "{{ path_win }}/apmia"
+      register: st_win_dir
+
+    # Checking whether apmia directory is blank or some files are there.
+    - win_find:
+        paths: "{{ path_win }}\\apmia"
+        file_type: directory
+        patterns: "*"
+      register: dir_files
+      when: st_win_dir.stat.exists == true
+
+    - name: Removing apmia directory, if it is empty
+      win_file:
+        state: absent
+        path: "{{ path_win }}\\apmia"
+      register: removed_empty_dir
+      when: st_win_dir.stat.exists == true and dir_files.matched|int == 0
+
+    - name: Checking Status of apmia directory, if it is removed in previous task
+      win_stat:
+        path: "{{ path_win }}/apmia"
+      register: st_win_dir
+
+    - name: Calling master installer script to force stop apmia service
+      win_command: APMIACtrl.bat force_stop
+      args:
+        chdir: "{{ path_win }}/apmia/"
+      register: outp_win
+      ignore_errors: yes
+      when: st_win_dir.stat.exists == true
+
+    - name: Check the status of apmia directory
+      win_stat:
+        path: "{{ path_win }}/apmia"
+      register: st_win_dir
+  when: ansible_os_family == "Windows"
+############################################################################################################
+
+############################ Tasks of force start for Linux machine ########################################
+- name: for linux
+  block:
+    - name: Checking whether apmia directory is present or not
+      stat:
+        path: "{{ path_linux }}/apmia"
+      register: st_linux_dir
+    - name: checking master installer script status
+      stat:
+         path: "{{ path_linux }}/apmia/APMIACtrl.sh"
+      register: apmia_script_status
+    - name: Check status of apmia service
+      shell: ./APMIACtrl.sh status
+      args:
+        chdir: "{{ path_linux }}/apmia/"
+      register: apmia_service_status
+      when: apmia_script_status.stat.exists == true
+    - block:
+        - name: service status
+          shell: "ps -ef | grep -v grep | grep UnifiedMonitoringAgent | grep -v 'service=TRUE'"
+          register: force_stat_service_status
+          failed_when: false
+        - name: Stopping apmia force_start
+          shell: "ps -ef | grep -v grep | grep UnifiedMonitoringAgent | awk '{ print $3 }' | xargs kill -9"
+          register: force_stop_command_output
+          when: 
+            - "'(not installed) is running' in apmia_service_status.stdout"
+           # - force_stat_service_status.stdout == ''
+        - name: Checking apmia.pid file
+          stat:
+             path: "{{ path_linux }}/apmia/bin/apmia.pid"
+          register: apmia_pid_file_status 
+
+        - name: stopping apmia if apmia is stopped
+          shell: "ps -ef | grep -v grep | grep UnifiedMonitoringAgent | awk '{ print $3 }' | xargs kill -9"
+          register: force_stop_command_output_with_stop
+          when:
+            - apmia_service_status.stdout | search( "\(installed with" )
+            - not apmia_service_status.stdout | search( "is not running" )
+            - force_stat_service_status.stdout != ''
+        - file:
+            path: "{{ item }}"
+            state: absent
+          with_items:
+              - "{{ path_linux }}/apmia/bin/apmia.pid"
+              - "{{ path_linux }}/apmia/bin/apmia.status"
+              - "{{ path_linux }}/apmia/bin/apmia.java.status"
+          when: force_stop_command_output.skipped is not defined or  force_stop_command_output_with_stop.skipped is not defined
+          register: pid_file_removed
+
+        - set_fact:
+             outp_linux: '{ stdout: "apmia running with force_start, stopped." }'
+          when: 
+            - force_stop_command_output.skipped is not defined
+            - force_stop_command_output | succeeded
+        - set_fact:
+             outp_linux: "{{ outp_linux | from_yaml }}"
+          when:
+            - force_stop_command_output.skipped is not defined
+            - force_stop_command_output | succeeded
+        - set_fact:
+             outp_linux: '{ stdout: "apmia running with force_start, stopped." }'
+          when: 
+            - force_stop_command_output_with_stop.skipped is not defined
+            - force_stop_command_output_with_stop | succeeded
+        - set_fact:
+             outp_linux: "{{ outp_linux | from_yaml }}"
+          when:
+            - force_stop_command_output_with_stop.skipped is not defined
+            - force_stop_command_output_with_stop | succeeded
+        - set_fact:
+             outp_linux: '{ stdout: "apmia is not running with force_start"}'
+          when: "force_stop_command_output_with_stop.skipped is defined and force_stop_command_output.skipped is defined"
+        - set_fact:
+             outp_linux: "{{ outp_linux | from_yaml }}"
+          when: "force_stop_command_output_with_stop.skipped is defined and force_stop_command_output.skipped is defined"
+      when: apmia_script_status.stat.exists == true
+  when: ansible_os_family == "RedHat" or  ansible_os_family == "Suse" or ansible_os_family == "Debian" # condition check fro Linux
+  become: true # for sudo user
+#########################################################################################################
+
+###################################Tasks to generate Report##############################################
+- name: Block for Report
+  block:
+    # Generating report on behalf of jinja2 template
+    - template:
+         src: ../template/report.j2
+         dest: "{{ playbook_dir }}/report.log"
+      delegate_to: localhost
+      #failed_when: false
+#########################################################################################################

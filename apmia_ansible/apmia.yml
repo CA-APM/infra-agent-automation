@@ -1,0 +1,50 @@
+############ Converting csv list to usable hosts file #####################
+- hosts: localhost
+  connection: local
+  gather_facts: false
+  tasks:
+    - set_fact: csvfile="{{ lookup('file', item) }}"
+      with_fileglob:
+         - "host_vars/*csv"
+    - set_fact: hosts_list="{{ lookup('file', './host_vars/apmia_hosts') }}"  
+    - name: Parse CSV To hosts
+      template:
+        src: "roles/apmia_role/template/hosts.j2"
+        dest: "./host_vars/apmia_hosts"
+      run_once: true
+      delegate_to: localhost
+      when: csvfile is defined
+    - meta: refresh_inventory
+##############################################################################
+
+######## Decrypting openssl encrypted password and sudo password ############
+- name: Decrypt, if password is increpted
+  hosts: all
+  gather_facts: False
+  tasks:
+    - name: check decrypt.sh is present or not
+      stat:
+        path: "roles/apmia_role/files/decrypt.sh"
+      run_once: true
+      delegate_to: localhost
+      register: decrypt_file_status
+    - command: sh roles/apmia_role/files/decrypt.sh {{ item|default('') }}
+      no_log: true
+      register: decrypted_password
+      delegate_to: localhost
+      with_items:
+          - "{{ ansible_password }}"
+          - "{{ ansible_sudo_pass }}"
+      when: decrypt_file_status.stat.exists == true
+    - set_fact:
+        ansible_password: '{{ decrypted_password.results[0].stdout }}'
+      when: decrypt_file_status.stat.exists == true and decrypted_password.results[0].stdout != ''
+    - set_fact:
+        ansible_sudo_pass: '{{ decrypted_password.results[1].stdout }}'
+      when: decrypt_file_status.stat.exists == true and decrypted_password.results[1].stdout != ''
+######################################################################################
+
+########### Including apmia role ##################################################
+    - include_role:
+        name: apmia_role
+#######################################################################################

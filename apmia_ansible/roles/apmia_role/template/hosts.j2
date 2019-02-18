@@ -1,0 +1,28 @@
+{% for item in csvfile.split("\n") %}
+{% if item[0] == "#" %}
+{% else %}
+{% set list = item.split(",") %}
+{% if list|count == 0 %}
+{% elif list|count == 1 %}
+{{ list[0]|trim() }}
+{% elif list|count == 2 %}
+{{ list[0]|trim() }} ansible_user={{ list[1]|trim() if list[1] != '' else 'root' }}
+{% elif list|count == 3 %}
+{{ list[0]|trim() }} ansible_user={{ list[1]|trim() if list[1] != '' else 'root' }} ansible_password={{ list[2]|trim() }}
+{% elif list|count == 4 %}
+{{ list[0]|trim() }} ansible_user={{ list[1]|trim() if list[1] != '' else 'root' }} ansible_password={{ list[2]|trim() }} ansible_sudo_pass={{ list[3]|trim }}
+{% elif list|count == 5 %}
+{{ list[0]|trim() }} ansible_user={{ list[1]|trim() if list[1] != '' else 'root' }} ansible_password={{ list[2]|trim() }} ansible_sudo_pass={{ list[3]|trim }} ansible_port={{ list[4]|trim|int if list[4] != '' else '22' }}
+{% elif list|count == 6 %}
+{{ list[0]|trim() }} ansible_user={{ list[1]|trim() if list[1] != '' else 'root' }} ansible_password={{ list[2]|trim() }} ansible_sudo_pass={{ list[3]|trim }} ansible_port={{ list[4]|trim|int if list[4] != '' else '22' }} ansible_connection={{ list[5]|trim if list[5] != '' else 'ssh' }}
+{% elif list|count == 7 %}
+{{ list[0]|trim() }} ansible_user={{ list[1]|trim() if list[1] != '' else 'root' }} ansible_password={{ list[2]|trim() }} ansible_sudo_pass={{ list[3]|trim }} ansible_port={{ list[4]|trim|int if list[4] != '' else '22' }} ansible_connection={{ list[5]|trim if list[5] != '' else 'ssh' }} ansible_winrm_server_cert_validation={{ list[6]|trim if list[6] != '' else 'false'}}
+{% elif list|count == 8 %}
+{{ list[0]|trim() }} ansible_user={{ list[1]|trim() if list[1] != '' else 'root' }} ansible_password={{ list[2]|trim() }} ansible_sudo_pass={{ list[3]|trim }} ansible_port={{ list[4]|trim|int if list[4] != '' else '22' }} ansible_connection={{ list[5]|trim if list[5] != '' else 'ssh' }} ansible_winrm_server_cert_validation={{ list[6]|trim if list[6] != '' else 'false' }} install_only={{ list[7]|trim if list[7] != '' else 'no' }}
+{% elif list|count == 9 %}
+{{ list[0]|trim() }} ansible_user={{ list[1]|trim() if list[1] != '' else 'root' }} ansible_password={{ list[2]|trim() }} ansible_sudo_pass={{ list[3]|trim }} ansible_port={{ list[4]|trim|int if list[4] != '' else '22' }} ansible_connection={{ list[5]|trim if list[5] != '' else 'ssh' }} ansible_winrm_server_cert_validation={{ list[6]|trim if list[6] != '' else 'false' }} install_only={{ list[7]|trim if list[7] != '' else 'no' }} need_IA_backup={{ list[8]|trim if list[8] != '' else 'no' }}
+{% elif list|count == 10 %}
+{{ list[0]|trim() }} ansible_user={{ list[1]|trim() if list[1] != '' else 'root' }} ansible_password={{ list[2]|trim() }} ansible_sudo_pass={{ list[3]|trim }} ansible_port={{ list[4]|trim|int if list[4] != '' else '22' }} ansible_connection={{ list[5]|trim if list[5] != '' else 'ssh' }} ansible_winrm_server_cert_validation={{ list[6]|trim if list[6] != '' else 'false' }} install_only={{ list[7]|trim if list[7] != '' else 'no' }} need_IA_backup={{ list[8]|trim if list[8] != '' else 'no' }} need_extension_backup={{ list[9]|trim if list[9] != '' else 'no' }}
+{% endif %}
+{% endif %}
+{% endfor %}

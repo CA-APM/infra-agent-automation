@@ -1,0 +1,170 @@
+
+########################### Prompt for sysedge properties values Add or Change ################################
+- block:
+    # Ask for want to Add/Change community property
+    - pause:
+        prompt: "Do you want to Add/Change community value ? (Y/N)"
+      register: change_community_values
+      run_once: true
+      until: change_community_values.user_input|lower is search( '^yes$|^y$|^no$|^n' )
+
+    # Exiting from playbook, if user not select 'Yes' option for community value change
+    - block:
+       - debug:
+           msg: "You not selected 'Yes' option for Community Values change, Exiting...."
+         run_once: true
+       - meta: end_play
+      when: change_community_values.user_input|lower is not search( '^yes$|^y$' )
+
+    # Ask value for community if you select 'Yes' for above option
+    - pause:
+          prompt: "Enter community values name,access and address separated by space \n This entry specifies SNMPv1 access communities. \nSNMPv2 and SNMPv3 can be configured in the sysedgeV3.cf configuration file.\nSyntax:\n   community <name> <access> [<addresses>]\nDescription:\n   <name>      is the community granting the defined access to the defined addresses.\n   <access>    is the type of access: 'read-write' or 'read-only'.\n   <addresses> is a space delimited list of IPv4/IPv6 addresses or hostnames (default is any address).\nExamples:\n   community private read-write\n   community public read-write fe80::2b0:d0ff:fe9b:7d72"
+      register: community_values
+      run_once: true
+      when: change_community_values.user_input|lower == "yes" or change_community_values.user_input|lower == "y"
+###################################################################################################################################
+
+######### Tasks for windows machine to Add/Change above sysedge property values (in file apmia/SystemEDGE/config/port1691 or apmia/SystemEDGE/config/port1791)#######
+- name: Tasks for Windows
+  block:
+    - name: Checking status of master installer script
+      win_stat:
+        path: "{{ path_win }}/apmia/APMIACtrl.bat"
+      register: st_win_script
+
+    - name: Checking status of apmia service
+      win_command: APMIACtrl.bat status
+      args:
+        chdir: "{{ path_win }}\\apmia\\"
+      register: apmia_service_status
+      when: st_win_script.stat.exists == true
+
+    - name: Checking whether apmia directory is present or not
+      win_stat:
+        path: "{{ item }}"
+      with_items:
+         - "{{ path_win }}\\apmia\\SystemEDGE\\port1691"
+         - "{{ path_win }}\\apmia\\SystemEDGE\\port1791"
+      register: status_sysedge_folder
+
+    # Printing console message, if sysedge/apmia not installed
+    - lineinfile:
+        path: "{{ playbook_dir }}/msg_temp"
+        line: "{{ ansible_hostname }} sysedge/apmia not installed at '{{ path_win }}'"
+        create: yes
+      delegate_to: localhost
+      when: status_sysedge_folder.results[0].stat.exists == false and status_sysedge_folder.results[1].stat.exists == false
+    ############## Changing/Adding Introscope Properties##############################################################
+    - block:
+        - name: Update sysedge.cf
+          win_lineinfile:
+            path: "{{ path_win }}\\apmia\\SystemEDGE\\port1691\\sysedge.cf"
+            regexp: '^community '
+            line: "community {{ community_values.user_input }}"
+          when: (community_values.user_input != "") and (change_community_values.user_input|lower == "yes" or change_community_values.user_input|lower == "y")
+          register: community_values_changed_1
+
+        # Print message on console if community value changed, with what value changed
+        - lineinfile:
+            path: "{{ playbook_dir }}/msg_temp"
+            line: "{{ ansible_hostname }} community changed to '{{ community_values.user_input }}'"
+            create: yes
+          delegate_to: localhost
+          when: community_values_changed_1 is defined and community_values_changed_1.skipped is not defined
+      when: community_values.skipped is not defined and status_sysedge_folder.results[0].stat.exists == true
+    - block:
+        - name: Update sysedge.cf
+          win_lineinfile:
+            path: "{{ path_win }}\\apmia\\SystemEDGE\\port1791\\sysedge.cf"
+            regexp: '^community '
+            line: "community {{ community_values.user_input }}"
+          when: community_values.user_input != "" and change_community_values.user_input|lower == "yes" or change_community_values.user_input == "y"
+          register: community_values_changed_2
+
+        # Print message on console if community value changed, with what value changed
+        - lineinfile:
+            path: "{{ playbook_dir }}/msg_temp"
+            line: "{{ ansible_hostname }} community changed to '{{ community_values.user_input }}'"
+            create: yes
+          delegate_to: localhost
+          when: community_values_changed_2 is defined and community_values_changed_2.skipped is not defined
+      when: community_values.skipped is not defined and status_sysedge_folder.results[1].stat.exists == true
+#########################################################################################################################################    
+    - name: Restart a service
+      win_service:
+        name: SysEDGE
+        state: restarted
+      when: community_values_changed_1.skipped is not defined or community_values_changed_2.skipped is not defined
+  when: ansible_os_family == "Windows"
+############################################################################################################################################################
+
+########## Tasks for Linux machine to Add/Change above sysedge property values (in file apmia/SystemEDGE/config/port1691 or apmia/SystemEDGE/config/port1791)###########
+- name: Tasks for Linux
+  block:
+
+    - name: Checking whether port directory is present or not
+      stat:
+        path: "{{ item }}"
+      with_items:
+         - "{{ path_linux }}/apmia/SystemEDGE/config/port1691"
+         - "{{ path_linux }}/apmia/SystemEDGE/config/port1791"
+      register: status_sysedge_folder
+
+    # Print console message if, sysedge/apmia not installed
+    - lineinfile:
+        path: "{{ playbook_dir }}/msg_temp"
+        line: "{{ ansible_hostname }} sysedge/apmia not installed at '{{ path_linux }}'"
+        create: yes
+      delegate_to: localhost
+      when: status_sysedge_folder.results[0].stat.exists == false and status_sysedge_folder.results[1].stat.exists == false
+
+    ############## Changing Introscope Properties##############################################################
+    - block:
+        - name: Update sysedge.cf
+          lineinfile:
+            path: "{{ path_linux }}/apmia/SystemEDGE/config/port1691/sysedge.cf"
+            regexp: '^community '
+            line: "community {{ community_values.user_input }}"
+          register: community_values_changed_1
+          when: community_values.user_input != "" and ( change_community_values.user_input|lower == "yes" or change_community_values.user_input|lower == "y" )
+
+        # Print message on console if community value changed, with what value changed
+        - lineinfile:
+            path: "{{ playbook_dir }}/msg_temp"
+            line: "{{ ansible_hostname }} community changed to '{{ community_values.user_input }}'"
+            create: yes
+          delegate_to: localhost
+          when: community_values_changed_1 is defined and community_values_changed_1.skipped is not defined
+      when: community_values.skipped is not defined and status_sysedge_folder.results[0].stat.exists == true
+    - block:
+        - name: Update sysedge.cf
+          lineinfile:
+            path: "{{ path_linux }}/apmia/SystemEDGE/config/port1791/sysedge.cf"
+            regexp: '^community private|public *'
+            insertafter: "^community apmmonitor read-only"
+            line: community {{ community_values.user_input }}
+          when: community_values.user_input != "" and change_community_values.user_input|lower is search( '^yes$|^y$|' )
+          register: community_values_changed_2
+
+        # Print message on console if community value changed, with what value changed
+     
+        - lineinfile:
+            path: "{{ playbook_dir }}/msg_temp"
+            line: "{{ ansible_hostname }} community changed to '{{ community_values.user_input }}'"
+            create: yes
+          delegate_to: localhost
+          when: community_values_changed_2 is defined and community_values_changed_2.skipped is not defined
+      when: community_values.skipped is not defined and status_sysedge_folder.results[1].stat.exists == "true"
+    ######################################################################################################################
+    
+    # Restarting apmia service, if sysedge property changed
+    - name: Restarting apmia
+      command: ./APMIACtrl.sh restart
+      args:
+        chdir: "{{ path_linux }}/apmia/"
+      register: apmia_restarted
+      ignore_errors: yes
+      when: community_values_changed_1.skipped is not defined or community_values_changed_2.skipped is not defined
+  when: ansible_os_family == "RedHat" or  ansible_os_family == "Suse" or ansible_os_family == "Debian"
+  become: true
+##########################################################################################################################################################

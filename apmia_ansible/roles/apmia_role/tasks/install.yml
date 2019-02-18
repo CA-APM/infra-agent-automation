@@ -1,0 +1,490 @@
+
+############################################### Setting facts for default directory #############################################
+- name: Setting some basic facts 
+  set_fact:
+     st_linux_dir_1: '{"failed": "False", "stat": {"exists": "False"}, "changed": "False"}'
+     st_win_dir_1: '{"failed": "False", "stat": {"exists": "False"}, "changed": "False"}'
+- name: Converting fact to nice json
+  set_fact:
+     st_linux_dir: "{{ st_linux_dir_1 | from_json }}"
+     st_win_dir: "{{ st_win_dir_1 | from_json }}"
+#################################################################################################################################
+
+############################################ Setting default install_only to 'yes' ###############################################
+- name: set fact install_only to 'yes'
+  set_fact:
+     install_only: 'no'
+  when: install_only is not defined or install_only == ""
+#################################################################################################################################
+
+#################################### Prompt to add Introscope property and its value ###########################################
+- name: Introscope property
+  block:
+    - pause:
+        prompt: "Do you want to add CA APM EM url ('agentManager.url.1') (Y/N) ? --> On selection of 'No', it will take default value localhost:8081"
+      register: interscope_property
+      run_once: true
+      until: interscope_property.user_input|lower is search( '^yes$|^y$|^no$|^n' )
+    - pause:
+        prompt: "Enter value for 'agentManager.url.1' followed by port number (for example:- http://example.com:8081 or example.com:5001)"
+      register: interscope_property_agentmanager_url_1
+      run_once: true
+      when: interscope_property.user_input|lower is search( '^yes$|^y$' )
+    - name: Setting interoscope_property_agentmanager_url_1 variable
+      set_fact:
+         interscope_property_agentmanager_url_1: "{{ interscope_property_agentmanager_url_1.user_input }}"
+      run_once: true
+      when: interscope_property.user_input|lower is search( '^yes$|^y$' )
+####################################################################################################################################
+
+###################################### Prompt to add Extensions and its value #####################################################
+#    - pause:
+#        prompt: "Do you want to update extensions ? (Y/N)"
+#      register: enable_disable_extension
+#      run_once: true
+#
+#    - block:
+#        - pause:
+#            prompt: Do you want to enable '{{ item }}' extension (Y/N) ?
+#          register: extension
+#          with_lines: cat "{{ playbook_dir }}/user_input/extension.cnf"
+#          run_once: true
+#          until: extension.user_input|lower is search( '^yes$|^y$|^n$|^no$' )
+#        - name: Setting extension_values variable
+ #         set_fact:
+  #           extension_values: "{{ extension.results | selectattr('user_input', 'match', '^yes$|^y$|^Y$|^Yes$|^YES') | map(attribute='item') | list | join(',') }}"
+   #       run_once: true
+   #   when: enable_disable_extension.user_input|lower is search( '^yes$|^y$' )
+###################################################################################################################################
+
+####################################################### Extra Property ############################################################
+#- name: Extra properties
+#  block:
+#    - pause:
+#        prompt: "Do you want to configure other properties i.e. aws accessKey, docker configuration etc ? (Y/N)"
+#      register: interscope_property_extra
+#      run_once: true
+#      until: interscope_property_extra.user_input|lower is search( '^yes$|^y$|^no$|^n' )
+#    - pause:
+#        prompt: "Enter properties and its value with -D in format '-Dcom.ca.apm.agent.aws.accessKey=xyz' without quotes"
+#      register: interscope_property_extra_value
+#      run_once: true
+#      when: interscope_property_extra.user_input|lower is search( '^yes$|^y$' )
+#    - name: Setting interoscope_property__extra_value variable
+#      set_fact:
+#         interscope_property_extra_value: "{{ interscope_property_extra_value.user_input }}"
+#      run_once: true
+#      when: interscope_property_extra.user_input|lower is search( '^yes$|^y$' )
+#    - name: Setting interoscope_property__extra_value variable
+#      set_fact:
+#         interscope_property_extra_value: ""
+#      run_once: true
+#      when: interscope_property_extra.user_input|lower is search( '^no$|^n$' )
+###################################################################################################################################
+
+############################################### Tasks to install apmia service for windows machine #############################
+- name: Tasks for Windows
+  block:
+    #- name: Setting interoscope_property__extra_value variable
+    #  set_fact:
+    #     interscope_property_extra_value: "{{interscope_property_extra_value|replace('=','_')}}"
+    #  when: interscope_property_extra_value != ""
+    - name: Creating installation directory, if it is not present
+      win_file:
+        path: "{{ path_win }}"
+        state: directory
+
+    - name: Checking whether apmia master installer script is present or not
+      win_stat:
+        path: "{{ path_win }}/apmia/APMIACtrl.bat"
+      register: st_win_script
+ 
+    - name: Removing apmia folder (if it is empty)
+      win_file:
+         state: absent
+         path: "{{ path_win }}/apmia"
+      register: removed_empty_dir
+      when: st_win_script.stat.exists == false
+
+    - name: Get zip file name
+      find:
+        paths: "roles/apmia_role/files/windows/"
+        patterns: '*.zip'
+      register: found_files
+      delegate_to: localhost
+
+    - name: Copying zip of apmia to remote machine
+      win_copy:
+        src: "{{ found_files.files[0].path }}"
+        dest: "{{ path_win }}\\"
+      register: win_copy
+      when: st_win_script.stat.exists == false and found_files.matched != 0
+
+    - name: Extracting zip of apmia to  Remote Machine
+      win_unzip:
+        src: "{{ path_win }}\\{{ found_files.files[0].path | win_basename }}"
+        dest: "{{ path_win }}\\"
+        delete_archive: yes
+      when: st_win_script.stat.exists == false and found_files.matched != 0
+
+    - name: Checking whether apmia directory is present or not
+      win_stat:
+        path: "{{ path_win }}/apmia"
+      register: st_win
+
+    - name: Checking status of master installer script
+      win_stat:
+        path: "{{ path_win }}/apmia/APMIACtrl.bat"
+      register: st_win_script
+
+    - set_fact:
+         found_files: '{"matched": "1"}'
+      when: st_win_script.stat.exists == true 
+    - set_fact:
+         found_files: "{{ found_files | from_json }}"
+      when: st_win_script.stat.exists == true 
+
+
+    - name: Checking status of apmia service
+      win_command: APMIACtrl.bat status
+      args:
+        chdir: "{{ path_win }}\\apmia\\"
+      register: apmia_service_status
+      when: st_win_script.stat.exists == true
+
+    - block:
+      ############################# Adding 'agentManager.url.1' value to IntroscopeAgent.profile ############################
+        - win_lineinfile:
+            path: "{{ path_win }}\\apmia\\core\\config\\IntroscopeAgent.profile"
+            regexp: '^agentManager.url.1='
+            line: "agentManager.url.1={{ interscope_property_agentmanager_url_1 }}"
+            backup: yes
+          register: agentmanager_url_1_changed
+          when: interscope_property_agentmanager_url_1.skipped is not defined and 'NOT ACTIVE' in apmia_service_status.stdout and 'RUNNING' not in apmia_service_status.stdout and 'Host Monitor Agent' not in apmia_service_status.stdout
+   
+        # Print console message on agentManager.url.1 changed
+        - block:
+            - lineinfile:
+               path: "{{ playbook_dir }}/msg_temp"
+               line: "{{ ansible_hostname }} 'agentManager.url.1' changed to '{{ interscope_property_agentmanager_url_1 }}'"
+               create: yes
+              delegate_to: localhost
+              when: agentmanager_url_1_changed is defined and agentmanager_url_1_changed.skipped is not defined
+            - lineinfile:
+               path: "{{ playbook_dir }}/msg_temp"
+               line: "{{ ansible_hostname }} 'agentManager.url.1' NOT changed to '{{ interscope_property_agentmanager_url_1 }}', apmia is Installed"
+               create: yes
+              delegate_to: localhost
+              when: agentmanager_url_1_changed is defined and agentmanager_url_1_changed.skipped is defined
+          when: interscope_property.user_input|lower is search( '^yes$|^y$' )
+        #######################################################################################################################
+    
+        ################################# Adding 'introscope.agent.extensions.bundles.load' value to Extensions.profile ####################
+       # - win_lineinfile:
+       #     path: "{{ path_win }}/apmia/extensions/Extensions.profile"
+        #    regexp: '^introscope.agent.extensions.bundles.load='
+        #    line: "introscope.agent.extensions.bundles.load={{ extension_values }}"
+        #    backup: yes
+        #  register: extensions_changed_changed
+        #  when: enable_disable_extension.user_input|lower is search( '^yes$|^y$' ) and extension_values.skipped is not defined and 'NOT ACTIVE' in apmia_service_status.stdout and 'RUNNING' not in apmia_service_status.stdout and 'Host Monitor Agent' not in apmia_service_status.stdout
+
+        # Print console message on introscope.agent.extensions.bundles.load changed
+        #- block:
+        #    - block:
+        #        - lineinfile:
+        #            path: "{{ playbook_dir }}/msg_temp"
+        #            line: "{{ ansible_hostname }} You not select any extension so Extension is disabled"
+        #            create: yes
+        #          delegate_to: localhost
+        #          when: extension_values == ""
+        #        - lineinfile:
+        #            path: "{{ playbook_dir }}/msg_temp"
+        #            line: "{{ ansible_hostname }} Extension(s) '{{ extension_values }}' Enabled."
+        #            create: yes
+        #          delegate_to: localhost
+        #          when: extension_values != ""
+        #      when: enable_disable_extension.user_input|lower is search( '^yes$|^y$' ) and extensions_changed_changed is defined and extensions_changed_changed.skipped is not defined
+        #    - block:
+        #        - lineinfile:
+        #            path: "{{ playbook_dir }}/msg_temp"
+        #            line: "{{ ansible_hostname }} 'introscope.agent.extensions.bundles.load' NOT changed to '{{ extension_values }}', apmia is Installed."
+        #            create: yes
+        #          delegate_to: localhost
+        #          when: extension_values != ""
+        #        - lineinfile:
+        #            path: "{{ playbook_dir }}/msg_temp"
+        #            line: "{{ ansible_hostname }} Extension(s) can't be disable, apmia is running."
+        #            create: yes
+        #          delegate_to: localhost
+        #          when: extension_values == ""
+        #      when: enable_disable_extension.user_input|lower is search( '^yes$|^y$' ) and extensions_changed_changed is defined and extensions_changed_changed.skipped is defined
+      #when: found_files.matched != 0
+    #####################################################################################################################################
+    
+    
+    - name: Calling master installer script to install apmia service
+      #win_command: APMIACtrl.bat install property="{{ interscope_property_extra_value }}"
+      win_command: APMIACtrl.bat install
+      args:
+        chdir: "{{ path_win }}\\apmia\\"
+      register: outp_win
+      when: st_win_script.stat.exists == true
+      failed_when: false
+      ignore_errors: yes
+      no_log: true
+
+    #################################################Printing Message for Extra Properties###########################################################
+   # - lineinfile:
+   #     path: "{{ playbook_dir }}/msg_temp"
+   #     line: "{{ ansible_hostname }} Extra property {{ interscope_property_extra_value }} NOT set, APMIA is Installed."
+   #     create: yes
+   #   delegate_to: localhost
+   #   when: 
+   #     - found_files.matched != 0
+   #     - interscope_property_extra.user_input|lower is search( '^yes$|^y$' ) 
+   #     - interscope_property_extra_value !=""  and outp_win|succeeded
+   #     - "'NOT ACTIVE' not in apmia_service_status.stdout or 'Host Monitor Agent' in apmia_service_status.stdout"
+   # - lineinfile:
+   #     path: "{{ playbook_dir }}/msg_temp"
+   #     line: "{{ ansible_hostname }} Extra property {{ interscope_property_extra_value }} have set"
+   #     create: yes
+   #   delegate_to: localhost
+   #   when: 
+   #     - found_files.matched != 0
+   #     - interscope_property_extra.user_input|lower is search( '^yes$|^y$' )
+   #     - interscope_property_extra_value !=""
+   #     - outp_win|succeeded
+   #     - "'NOT ACTIVE' in apmia_service_status.stdout"
+   #     - "'Host Monitor Agent' not in apmia_service_status.stdout"
+    #####################################################################################################################################
+
+    - name: stopping apmia service is install_only option is 'yes'
+      win_command: APMIACtrl.bat stop
+      args:
+        chdir: "{{ path_win }}\\apmia\\"
+      register: output_stop
+      when: st_win_script.stat.exists == true and install_only|lower == "yes" and 'installation is present' not in outp_win.stdout and found_files.matched != 0
+    - block:
+        - name: Calling master installer script to check status of apmia service
+          win_command: APMIACtrl.bat status
+          args:
+            chdir: "{{ path_win }}\\apmia\\"
+          register: outp_win | default "{{ outp_win }}"
+          when: "'installation is present' not in outp_win.stdout"
+      when: st_win_script.stat.exists == true and found_files.matched != 0
+    # Setting fact to print message, if apmia package is not present
+    - set_fact:
+         outp_win: '{"stdout": "APMIA zip package is not present in directory files/windows"}'
+      when: found_files.matched == 0
+    - set_fact:
+         outp_win: "{{ outp_win | from_json }}"
+      when: found_files.matched == 0
+    - set_fact:
+         st_win_dir: '{"stat": {"exists": "True"}}'
+      when: found_files.matched == 0
+    - set_fact:
+         st_win_dir: "{{ st_win_dir | from_json }}"
+      when: found_files.matched == 0
+  when: ansible_os_family == "Windows" # Condition check for windows machine
+############################################################################################################################################
+
+##################################  Installation Tasks for Linux machine #################################################################
+- name: Tasks for Linux
+  block:
+    - name: Creating installation directory, if it is not present
+      file:
+        path: "{{ path_linux }}"
+        state: directory
+
+    - name: Checking whether apmia master installer script is present or not
+      stat:
+        path: "{{ path_linux }}/apmia/APMIACtrl.sh"
+      register: st_linux_script
+
+    - name: Removing apmia folder (If it is empty)
+      file:
+        state: absent
+        path: "{{ path_linux }}/apmia"
+      register: removed_empty_dir
+      when: st_linux_script.stat.exists == false
+
+    # get tar.gz/tar file name
+    - name: Get tar.gz/tar file name
+      find:
+        paths: "roles/apmia_role/files/unix/"
+        patterns: '*.tar.gz,*.tar'
+      register: found_files
+      delegate_to: localhost
+
+    - name: Extracting tar of apmia to remote machine
+      unarchive:
+        src: "{{ item }}"
+        dest: "{{ path_linux }}"
+      with_fileglob: 
+        - "../files/unix/*.tar.gz"
+        - "../files/unix/*.tar"
+      register: linux_copy
+      when: st_linux_script.stat.exists == false or removed_empty_dir.changed == true 
+
+    - name: Checking Status of apmia directory, if it is removed in previous task
+      stat:
+        path: "{{ path_linux }}/apmia"
+      register: st_linux
+    - name: Checking whether apmia master installer script is present or not
+      stat:
+        path: "{{ path_linux }}/apmia/APMIACtrl.sh"
+      register: st_linux_script
+
+    - set_fact:
+         found_files: '{"matched": "1"}'
+      when: st_linux_script.stat.exists == true 
+    - set_fact:
+         found_files: "{{ found_files | from_json }}"
+      when: st_linux_script.stat.exists == true 
+
+    - name: Calling master installer script to check status of apmia service
+      command: ./APMIACtrl.sh status
+      args:
+        chdir: "{{ path_linux }}/apmia/"
+      register: apmia_service_status
+      when: st_linux_script.stat.exists == true
+
+    - block:
+        ######### Adding 'introscope.agent.extensions.bundles.load' value to Extensions.profile ########
+        ###### Adding 'agentManager.url.1' value to IntroscopeAgent.profile file ########
+        - lineinfile:
+            path: "{{ path_linux }}/apmia/core/config/IntroscopeAgent.profile"
+            regexp: '^agentManager.url.1='
+            line: "agentManager.url.1={{ interscope_property_agentmanager_url_1 }}"
+            backup: yes
+          register: agentmanager_url_1_changed
+          when: interscope_property_agentmanager_url_1.skipped is not defined  and 'not installed' in apmia_service_status.stdout and 'CA-SystemEDGE' not in apmia_service_status.stdout
+
+        # Print console message on agentManager.url.1 changed
+        - block:
+            - lineinfile:
+                path: "{{ playbook_dir }}/msg_temp"
+                line: "{{ ansible_hostname }} 'agentManager.url.1' changed to '{{ interscope_property_agentmanager_url_1 }}'"
+                create: yes
+              delegate_to: localhost
+              when: agentmanager_url_1_changed is defined and agentmanager_url_1_changed.skipped is not defined
+            - lineinfile:
+                path: "{{ playbook_dir }}/msg_temp"
+                line: "{{ ansible_hostname }} 'agentManager.url.1' NOT changed to '{{ interscope_property_agentmanager_url_1 }}', apmia is Installed"
+                create: yes
+              delegate_to: localhost
+              when: agentmanager_url_1_changed is defined and agentmanager_url_1_changed.skipped is defined
+          when: interscope_property.user_input|lower is search( '^yes$|^y$' ) and found_files.matched != 0
+          #run_once: true
+        #################################################################################
+     
+   #     - lineinfile:
+   #         path: "{{ path_linux }}/apmia/extensions/Extensions.profile"
+   #         regexp: '^introscope.agent.extensions.bundles.load='
+   #         line: "introscope.agent.extensions.bundles.load={{ extension_values }}"
+   #         backup: yes
+   #       register: extensions_changed_changed
+   #       when: enable_disable_extension.user_input|lower is search( '^yes$|^y$' ) and extension_values.skipped is not defined and 'not installed' in apmia_service_status.stdout  and 'CA-SystemEDGE' not in apmia_service_status.stdout
+
+        # Print console message on introscope.agent.extensions.bundles.load changed
+   #     - block:
+   #         - block:
+   #             - lineinfile:
+   #                 path: "{{ playbook_dir }}/msg_temp"
+   #                 line: "{{ ansible_hostname }} You not select any extension so Extension is disabled"
+   #                 create: yes
+   #               delegate_to: localhost
+   #               when: extension_values == ""
+   #             - lineinfile:
+   #                 path: "{{ playbook_dir }}/msg_temp"
+   #                 line: "{{ ansible_hostname }} Extension(s) '{{ extension_values }}' Enabled."
+   #                 create: yes
+   #               delegate_to: localhost
+   #               when: extension_values != ""
+   #           when: extensions_changed_changed is defined and extensions_changed_changed.skipped is not defined and enable_disable_extension.user_input|lower is search( '^yes$|^y$' )
+   #         - block:
+   #             - lineinfile:
+   #                 path: "{{ playbook_dir }}/msg_temp"
+   #                 line: "{{ ansible_hostname }} 'introscope.agent.extensions.bundles.load' NOT changed to '{{ extension_values }}', apmia is Installed."
+   #                 create: yes
+   #               delegate_to: localhost
+   #               when: enable_disable_extension.user_input|lower is search( '^yes$|^y$' ) and extension_values != ""
+   #             - lineinfile:
+   #                 path: "{{ playbook_dir }}/msg_temp"
+   #                 line: "{{ ansible_hostname }} Extension(s) can't be disable, apmia is running."
+   #                 create: yes
+   #               delegate_to: localhost
+   #               when: enable_disable_extension.user_input|lower is search( '^yes$|^y$' ) and extension_values == ""
+   #           when: extensions_changed_changed is defined and extensions_changed_changed.skipped is defined
+          #when: extension_change.user_input|lower == "yes"
+
+          #run_once: true
+        ##################################################################################################
+   #   when: found_files.matched != 0
+################################################################################################################
+    - name: Calling master installer script to install apmia service
+      #command: ./APMIACtrl.sh install property="{{ interscope_property_extra_value }}"
+      command: ./APMIACtrl.sh install
+      args:
+        chdir: "{{ path_linux }}/apmia/"
+      register: outp_linux
+      when: st_linux_script.stat.exists == true
+      failed_when: false
+    
+    #################################################Printing Message for Extra Properties###########################################################
+  #  - lineinfile:
+  #         path: "{{ playbook_dir }}/msg_temp"
+  #         line: "{{ ansible_hostname }} Extra property {{ interscope_property_extra_value }} NOT set, APMIA is Installed."
+  #         create: yes
+  #    delegate_to: localhost
+  #    when: found_files.matched != 0 and interscope_property_extra.user_input|lower is search( '^yes$|^y$' ) and interscope_property_extra_value != "" and outp_linux|succeeded and ( 'not installed' not in apmia_service_status.stdout or 'CA-SystemEDGE' in apmia_service_status.stdout )
+  #  - lineinfile:
+  #         path: "{{ playbook_dir }}/msg_temp"
+  #         line: "{{ ansible_hostname }} Extra property {{ interscope_property_extra_value }} have set"
+  #         create: yes
+  #    delegate_to: localhost
+  #    when: found_files.matched != 0 and interscope_property_extra.user_input|lower is search( '^yes$|^y$' ) and interscope_property_extra_value !="" and outp_linux|succeeded and 'not installed' in apmia_service_status.stdout and 'CA-SystemEDGE' not in apmia_service_status.stdout
+    ##################################################################################################################################################
+
+    - name: stopping apmia service, if install_only option is 'yes'
+      command: ./APMIACtrl.sh stop
+      args:
+        chdir: "{{ path_linux }}/apmia/"
+      register: output_stop
+      when: install_only|lower == "yes" and 'is running' not in outp_linux.stdout and found_files.matched != 0
+    - block:
+        - name: Calling master installer script to check status of apmia service
+          command: ./APMIACtrl.sh status
+          args:
+            chdir: "{{ path_linux }}/apmia/"
+          register: outp_linux | default "{{ outp_linux }}"
+          ignore_errors: yes
+          when: "'already installed/corrupt installation' not in outp_linux.stdout or 'APMIA is already running using' not in outp_linux.stdout or 'APM Infrastructure Agent (not installed) is not running' not in outp_linux.stdout"
+      when: found_files.matched != 0
+    # Setting fact to print message, if apmia package is not present
+    - block:
+        - set_fact:
+             outp_linux: '{"stdout": "APMIA tar.gz/tar package is not present in directory files/unix"}'
+          when: found_files.matched == 0
+        - set_fact:
+             outp_linux: "{{ outp_linux | from_json }}"
+          when: found_files.matched == 0
+        - set_fact:
+             st_linux_dir: '{"stat": {"exists": "True"}}'
+          when: found_files.matched == 0
+        - set_fact:
+             st_linux_dir: "{{ st_linux_dir | from_json }}" 
+          when: found_files.matched == 0
+  when: ansible_os_family == "RedHat" or  ansible_os_family == "Suse" or ansible_os_family == "Debian" # Condition check for linux
+  become: true # For sudo user
+############################################################################################################################################
+
+#########################################Tasks to generate Report###################################################################
+- name: Block for Report
+  block:
+    # Generating report on behalf of jinja2 template
+    - template:
+         src: ../template/report.j2
+         dest: "{{ playbook_dir }}/report.log"
+      delegate_to: localhost
+#############################################################################################################################################

@@ -1,0 +1,105 @@
+
+
+########################################### Display the list of all commands ###########################################
+- pause:
+    prompt: "\nSelect From Below Options:\n 1. install                   ------> This command installs apmia \n 2. uninstall                 ------> This command uninstall apmia\n 3. clean_uninstall           ------> This command uninstalls the apmia and SystemEDGE,it removes IA directories also.\n 4. status                    ------> This command use to Check ampia Status\n 5. start                     ------> This command starts apmia\n 6. stop                      ------> This command stops apmia\n 7. force_start               ------> This command runs the IA in a non-service based manner, without installing the agent\n 8. force_stop                ------> This command stops an IA instance that was initiated by force_start\n 9. restart                   ------> This command restarts apmia\n10. configure_apmia_property  ------> This command use to Configure properties in IntroscopeAgent.profile file\n11. enable_disable_extension  ------> This command use to Enable/Disable extensions\n12. configure_sysedge         ------> This command will configure sysedge.cf file\n13. install_sysedge           ------> This command will install sysedge only\n14. exit                      ------> This command use to Exit from Play.\n\nPlease Enter Your Choice"
+  register: selected_option
+  run_once: true
+############################################################################################################################################
+
+###################################### Exit if user enter incorrect input###############################################
+- block:
+   - debug:
+       msg: "Please select valid Option from above list ( for example: install)"
+   - meta: end_play
+  when: ( selected_option.user_input != "install" ) and ( selected_option.user_input != "uninstall" ) and ( selected_option.user_input != "clean_uninstall" ) and ( selected_option.user_input != "start" ) and ( selected_option.user_input != "stop" ) and ( selected_option.user_input != "status" ) and ( selected_option.user_input != "restart" ) and ( selected_option.user_input != "configure_apmia_property" ) and ( selected_option.user_input != "enable_disable_extension" ) and ( selected_option.user_input != "force_start" ) and ( selected_option.user_input != "force_stop" ) and ( selected_option.user_input != "configure_sysedge" )and ( selected_option.user_input != "install_sysedge" ) and ( selected_option.user_input|lower != "exit" ) and ( selected_option.user_input|lower != "1" ) and ( selected_option.user_input|lower != "2" ) and ( selected_option.user_input|lower != "3" ) and ( selected_option.user_input|lower != "4" ) and ( selected_option.user_input|lower != "5" ) and ( selected_option.user_input|lower != "6" ) and ( selected_option.user_input|lower != "7" ) and ( selected_option.user_input|lower != "8" ) and ( selected_option.user_input|lower != "9" ) and ( selected_option.user_input|lower != "10" ) and ( selected_option.user_input|lower != "11" ) and ( selected_option.user_input|lower != "12" ) and ( selected_option.user_input|lower != "13" ) and ( selected_option.user_input|lower != "14" )
+  run_once: true
+############################################################################################################################################
+
+###################################### Exit from play###############################################
+- block:
+    - debug:
+        msg: "Exiting from Play..."
+    - meta: end_play
+  when: selected_option.user_input|lower == "exit" or selected_option.user_input == "14"
+  run_once: true
+####################################################################################################
+
+############################### Set Fact of command name on numeric selection ################################
+- set_fact:
+     selected_option: {"user_input":"install"}
+  when: selected_option.user_input == "1"
+- set_fact:
+     selected_option: {"user_input":"uninstall"}
+  when: selected_option.user_input == "2"
+- set_fact:
+     selected_option: {"user_input":"clean_uninstall"}
+  when: selected_option.user_input == "3"
+- set_fact:
+     selected_option: {"user_input":"status"}
+  when: selected_option.user_input  == "4"
+- set_fact:
+     selected_option: {"user_input":"start"}
+  when: selected_option.user_input == "5"
+- set_fact:
+     selected_option: {"user_input":"stop"}
+  when: selected_option.user_input == "6"
+- set_fact:
+     selected_option: {"user_input":"force_start"}
+  when: selected_option.user_input == "7"
+- set_fact:
+     selected_option: {"user_input":"force_stop"}
+  when: selected_option.user_input == "8"
+- set_fact:
+     selected_option: {"user_input":"restart"}
+  when: selected_option.user_input == "9"
+- set_fact:
+     selected_option: {"user_input":"configure_apmia_property"}
+  when: selected_option.user_input == "10"
+- set_fact:
+     selected_option: {"user_input":"enable_disable_extension"}
+  when: selected_option.user_input == "11"
+- set_fact:
+     selected_option: {"user_input":"configure_sysedge"}
+  when: selected_option.user_input == "12"
+- set_fact:
+     selected_option: {"user_input":"install_sysedge"}
+  when: selected_option.user_input == "13"
+##############################################################################################
+- name: Writing command name to temp file
+  copy: 
+     content: "{{ selected_option.user_input }}"
+     dest: "{{ playbook_dir }}/comment_temp"
+  run_once: true
+  delegate_to: localhost
+
+- name: including variable file  vars/variables.yml
+  include_vars: ../vars/variables.yml
+
+- name: Identifying Machine os Family
+  raw: command uname -a; python -V
+  args:
+    executable: /bin/bash
+  register: machine_os
+  failed_when: false
+
+############### Resolve python dependency on Linux machine##############################################
+- name: Installing Python (If not present in Linux machine)
+  block:
+    - name: Installing python in Fedora (If not Present)
+      raw: dnf install -y python2 python2-dnf libselinux-python
+      failed_when: false
+      no_log: true
+    - name: Installing python in Redhat/Centos/Oracle Linux/Suse (If not Present)
+      raw: yum -y install python-simplejson
+      failed_when: false
+      no_log: true
+    - name: Installing python in Debian System (If not Present)
+      raw: test -e /usr/bin/python || (apt -y update && apt install -y python-minimal)
+      failed_when: false
+      no_log: true
+  when: machine_os.failed == false and "Python" not in machine_os.stdout and "Linux" in machine_os.stdout
+#####################################################################################################################
+
+- setup: #setup task to gather facts of remote machine
+- include_tasks: "{{ selected_option.user_input }}.yml" # calling script as per user input

@@ -1,0 +1,85 @@
+
+################################ Setting essential facts of default installation directory #####################################################
+- set_fact:
+     st_linux_dir: '{"failed": "False", "stat": {"exists": "False"}, "changed": "False"}'
+     st_win_dir: '{"failed": "False", "stat": {"exists": "False"}, "changed": "False"}'
+- set_fact:
+     st_linux_dir: "{{ st_linux_dir | from_json }}"
+     st_win_dir: "{{ st_win_dir | from_json }}"
+###############################################################################################################################################
+
+######################################## Tasks of uninstall for windows machine ##############################################################
+- name: for Windows
+  block:
+
+    - name: Checking whether apmia master installer script is present or not
+      win_stat:
+        path: "{{ path_win }}/apmia"
+      register: st_win_script
+
+    - name: Removing apmia directory, if it is empty or master installer script is not present
+      win_file:
+        state: absent
+        path: "{{ path_win }}/apmia"
+      register: removed_empty_dir
+      when: st_win_script.stat.exists == false
+
+    - name: Checking status of apmia directory, if it is removed in previous task
+      win_stat:
+        path: "{{ path_win }}/apmia"
+      register: st_win_dir
+
+    - name: Calling master installer script to uninstall apmia service
+      win_command: APMIACtrl.bat uninstall
+      args:
+        chdir: "{{ path_win }}/apmia/"
+      register: outp_win
+      ignore_errors: yes
+      failed_when: false
+      when: st_win_script.stat.exists == true
+  when: ansible_os_family == "Windows" # condition check for windows machine
+################################################################################################################
+
+############################## Tasks of force start for Linux machine ###########################################
+- name: Tasks List for Linux
+  block:
+
+    - name: Checking whether apmia master installer script is present or not
+      stat:
+        path: "{{ path_linux }}/apmia"
+      register: st_linux_script
+
+    - name: Removing apmia directory, if it is empty or master installer script is not present
+      file:
+        state: absent
+        path: "{{ path_linux }}/apmia"
+      register: removed_empty_dir
+      when: st_linux_script.stat.exists == false
+
+    - name: Checking status of apmia directory
+      stat:
+        path: "{{ path_linux }}/apmia"
+      register: st_linux_dir
+
+    - name: Calling master installer script to uninstall apmia service
+      command: ./APMIACtrl.sh uninstall
+      args:
+        chdir: "{{ path_linux }}/apmia/"
+      register: outp_linux
+      ignore_errors: yes
+      failed_when: false
+      when: st_linux_script.stat.exists == true
+  when: ansible_os_family == "RedHat" or ansible_os_family == "Debian" or ansible_os_family == "Suse" #Condition check for linux machine
+  become: true # For sudo user
+###########################################################################################################################################
+
+########################################Tasks to generate Report###################################################################
+- name: Block for Report
+  block:
+    
+    # Generating report on behalf of jinja2 template
+    - template:
+         src: ../template/report.j2
+         dest: "{{ playbook_dir }}/report.log"
+      delegate_to: localhost
+##############################################################################################################################################
