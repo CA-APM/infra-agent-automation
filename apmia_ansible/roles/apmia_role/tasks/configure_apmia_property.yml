@@ -314,7 +314,7 @@
             create: yes
           delegate_to: localhost
           when: agentmanager_url_1_changed is defined and agentmanager_url_1_changed.skipped is not defined
-      when: status_introscope_file.stat.exists == true and 'is running' in apmia_service_status.stdout
+      when: status_introscope_file.stat.exists == true and 'is running' in apmia_service_status.stdout and 'not installed' not in apmia_service_status.stdout
     ############################################################################################################
     ##### Set Extra Property as environment variable ######################
     - block:
@@ -331,7 +331,7 @@
             create: yes
           delegate_to: localhost
           when: environment_restart|succeeded
-      when: introscope_property_extra.user_input|lower is search( '^yes$|^y$' ) and apmia_service_status.skipped is not defined and 'is running' in apmia_service_status.stdout
+      when: introscope_property_extra.user_input|lower is search( '^yes$|^y$' ) and apmia_service_status.skipped is not defined and 'is running' in apmia_service_status.stdout and 'not installed' not in apmia_service_status.stdout
 
     ######################################################################
 ############################ Print Message, if apmia not installed or apmia folder not present at location###############################
@@ -343,7 +343,7 @@
       when: 
         - introscope_property.user_input|lower is search( '^yes$|^y$' ) or introscope_property_extra.user_input|lower is search( '^yes$|^y$' )
         - apmia_service_status.skipped is not defined
-        - "'is running' not in apmia_service_status.stdout"
+        - not ('is running' in apmia_service_status.stdout) or 'not installed' in apmia_service_status.stdout
 
     - lineinfile:
          path: "{{ playbook_dir }}/msg_temp"

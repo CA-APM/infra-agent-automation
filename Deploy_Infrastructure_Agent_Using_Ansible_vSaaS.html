@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>Deploy Infrastructure Agent Using Ansible</title>
+</head>
+<body>
+<h1>Deploy the Infrastructure Agent Using Ansible</h1>
+<p>
+Ansible is an open source software automation platform that lets you deploy, manage, and operate applications remotely and agentlessly using industry-standard SSH or PowerShell connections. You can use Ansible to deploy the Infrastructure Agent and to automate Infrastructure Agent-related tasks on multiple hosts simultaneously. The following tasks are supported:
+<ul>
+<li>The standard Infrastructure Agent commands (install, uninstall, start, stop, restart, status, clean_uninstall, force_start, force_stop, restart)</li>
+<li>Configure Infrastructure Agent properties</li>
+<li>Configure the Infrastructure Agent extensions property</li>
+<li>Install and configure Host Monitoring</li>
+<li>Generate a report for the performed operations</li>
+</ul>
+This documentation covers the following topics. For in-depth information about Ansible, see the Ansible Documentation.
+<ul>
+<li>Install Ansible</li>
+	<ul>
+	<li>Ansible Server (Control Machine)</li>
+	<li>Client Computer</li>
+	</ul>
+<li>Prepare a Host List</li>
+<li>Download and Extract the Infrastructure Agent with Ansible Package</li>
+<li>Run the Playbook</li>
+<li>Run Infrastructure Agent Commands</li>
+<ul>
+	<li>Infrastructure Agent Commands</li>
+	<li>Infrastructure Agent Properties Configuration Commands</li>
+	<li>Host Monitoring Commands</li>
+</ul>
+<li>Ansible Configuration Reference</li>
+</ul>
+</p>
+<h2>Install Ansible</h2>
+<h3>Ansible Server (Control Machine)</h3>
+<p>
+The Ansible server must be installed on a UNIX system. Supported distros include Red Hat, Debian, CentOS, and OS X. Windows operating systems are not supported for the control machine. Python is also required. For full details about the installation requirements, see the Ansible Documentation.
+Use your customary installation method. For example, on Red Hat:
+
+<p style="color:DodgerBlue;">yum install ansible</p>
+
+If the client computer you want to orchestrate runs a Windows operating system, you must also install the pip and winpyrm packages on the control machine. For example:
+
+<p style="color:DodgerBlue;">yum install python-pip</p>
+
+<p style="color:DodgerBlue;">pip install winpyrm</p>
+</p>
+<h3>Client Computer</h3>
+<p>No action is required on UNIX client computers. For Windows clients, you must meet the setup requirements detailed at <a href="https://docs.ansible.com/ansible/latest/user_guide/windows_setup.html">Setting Up a Windows Host</a> in the Ansible Documentation.</p>
+<h2>Prepare a Host List</h2>
+<p>You provide the list of hosts you want to operate from the Control Machine in the form of a comma-separated-value (.csv) list, or by editing the <b>apmia_ansible/host_vars/apmia_hosts</b> file directly.</p>
+<h3>Use a CSV file:</h3>
+<p>Review the sample CSV file entries for UNIX and Windows in the <b>HostFile.csv.sample</b> file at <b>apmia_ansible/host_vars</b>, and use them as a reference to build your own. Each entry contains the following parameters:
+<ul>
+<li><b>host</b></li>
+Hostname
+<li><b>ansible_user</b></li>
+root or sudo user
+<li><b>ansible_password</b></li>
+Host password
+<li><b>ansible_sudo_pass</b></li>
+(Linux) To log in with sudo, provide the sudo password.
+<li><b>ansible_port</b></li>
+22 for Linux (default SSH port), 5986 for the WinRM module
+<li><b>ansible_winrm_server_cert_validation</b></li>
+(Windows) Set this parameter to yes to validate the server-client base authentication certificate. The default value is no.
+<li><b>install_only</b></li>
+Possible values are: yes, no, or blank. When set to yes, the installation commands install and install_sysedge install the APMIA and sysedge services, respectively, without starting the service. When set to no or left blank, Ansible installs and starts the services.
+<li><b>need_IA_backup</b></li>
+Possible values are: yes, no, or blank. . When set to yes, a backup file is created inside the config folder (/apmia/core/config). When set to no or left blank, no backup file is created.
+<li><b>need_extension_backup</b></li>
+Possible values are: yes, no, or blank. . When set to yes, a backup file is created inside the extension folder (/apmia/core/extensions). When set to no or left blank, no backup file is created.
+</ul>
+</p>
+<h3>Edit apmia_ansible/host_vars/apmia_hosts:</h3>
+<p>
+<ul>
+<li><b>To specify the list of hosts on UNIX,</b> use the following format:</li>
+<h4>As root:</h4>
+<p style="color:DodgerBlue;">hostname ansible_user=root ansible_password=password install_only=no need_IA_backup=no need_extension_backup=no</p>
+
+<h4>As a sudo user:</h4>
+<p style="color:DodgerBlue;">hostname ansible_user=sudo_user ansible_password=password ansible_sudo_pass=sudo_password install_only=no need_IA_backup=no need_extension_backup=no</p>
+
+<li><b>To specify the list of hosts on Windows,</b> use the following format:</li>
+<p style="color:DodgerBlue;">hostname ansible_user=administrator ansible_password=password ansible_port=5986 ansible_connection=winrm ansible_winrm_server_cert_validation=ignore install_only=no need_IA_backup=no need_extension_backup=yes</p>
+<p style="color:Tomato;">Note: For Windows remote machines, in the apmia_hosts file you must define ansible_port=5986 ansible_connection=winrm ansible_winrm_server_cert_validation=ignore. If you use a CSV file, the ansible_port, ansible_connection, and ansible_winrm_server_cert_validation parameters must be set to 5986, winrm and ignore, respectively. </p>
+</ul>
+</p>
+<h2>Download and Extract the Infrastructure Agent with Ansible Package</h2>
+<p>The Infrastructure installation includes and uses a local installation of the Java Runtime Environment (JRE).</p>
+<h3>Follow these steps:</h3>
+<p>
+<ol>
+<li>Sign up for a <a href="https://www.ca.com/us/trials/digital-experience-insights.html#trial"> free trial </a> or purchase an Essentials or Enterprise Edition of CA Digital Experience Insights.</li>
+<li>After registration, you receive your credentials and a tenant ID.</li>
+<li>Log in to CA Digital Experience Insights.</li>
+<li>Click <b>Open</b> on the <b>Application Performance Management</b> box.</li>
+The Application Performance Management home page appears.
+<li>Click <b>Download Agent</b> at the top of any page.</li>
+
+<b>Note:</b> If you already connected one agent, you can only access the <b>Download Agent</b> button by clicking <b>Agents</b> in the left pane, under <b>Settings</b>. 
+
+<li>On the <b>Select Agent to Download</b> page, select your operating system.</li>
+<li>Under the the <b>Infrastructure</b> category, click <b>Infrastructure Ansible</b> as the agent.</li>
+<li>Hover over the  (i)icon next to each extension to obtain details about the functionality of the extension.</li>
+<li>Select the monitoring extensions that you want to install.</li>
+<li>Click <b>Download and Install</b>, and follow the installer instructions.</li>
+</ol>
+</p>
+<h2>Run the Playbook</h2>
+<p>An Ansible playbook is a configuration and deployment file that contains the steps or policies you want to manage on the remote system. To deploy and operate the Infrastructure Agent with Ansible, you run the <b>apmia.yml</b> playbook in the <b>apmia_ansible</b> folder.</p>
+<h3>Follow these steps:</h3>
+<p>
+<ol>
+<li>Copy the <text style="color:DodgerBlue;">apmia_ansible</text> folder to your Ansible server.</li>
+<li>Place your APMIA bundle .zip or .tar.gz file in the <text style="color:DodgerBlue;">apmia_ansible/roles/apmia_role/files/windows/ or apmia_ansible/roles/apmia_role/files/unix/</text> directory, respectively.</li>
+<li>Navigate to the <text style="color:DodgerBlue;">apmia_ansible</text> folder, for example: <text style="color:DodgerBlue;">cd apmia_ansible<p></li>
+<li><b>Run the playbook:</b> <text style="color:DodgerBlue;"><b>ansible-playbook apmia.yml</b></text></li>
+The playbook checks for the CSV file and converts the host entries to a host list in the Ansible inventory file <text style="color:DodgerBlue;">(apmia_ansible/host_vars/apmia_hosts)</text>. Ansible then installs the dependency on each client.
+</ol>
+</p>
+<h2>Run Infrastructure Agent Commands</h2>
+<p>After installing the dependency, you are ready to execute Infrastructure Agent and Host Monitoring (sysedge)-specific commands on the host. The following commands are available:</p>
+<h3>Infrastructure Agent Commands</h3>
+<ul>
+<li><b>install</b></li>
+Use this command to install the Infrastructure Agent. 
+<li><b>uninstall</b></li>
+Use this command to uninstall the Infrastructure Agent.
+<li><b>clean_uninstall</b></li>
+Use this command to uninstall the Infrastructure Agent, directories of the Infrastructure Agent, and Systemedge.
+<li><b>status</b></li>
+Use this command to check the status of the Infrastructure Agent.
+<li><b>start</b></li>
+Use this command to start the Infrastructure Agent.
+<li><b>stop</b></li>
+Use this command to stop the Infrastructure Agent.
+<li><b>force_start</b></li>
+Use this command to run the Infrastructure Agent in a non-service manner, without installing the Infrastructure Agent.
+<li><b>force_stop</b></li>
+Use this command to stop an instance of the Infrastructure Agent that was initiated by force_start.
+<li><b>restart</b></li>
+Use this command to restart the Infrastructure Agent.
+</ul>
+<h3>Infrastructure Agent Properties Configuration Commands</h3>
+<ul>
+<li><b>config_apmia_property</b></li>
+Configure properties in the IntroscopeAgent.profile file
+<li><b>config_extension_property</b></li>
+Enable/disable extensions in the Extensions.profile file
+</ul>
+<h3>Host Monitoring Commands</h3>
+<ul>
+<li><b>install_sysedge</b></li>
+Install the Host Monitoring extension (SysEdge)
+<li><b>config_sysedge</b></li>
+Configure the Host Monitoring configuration file (sysedge.cf)
+</ul>
+<h2>Ansible Configuration Reference</h2>
+<p>Ansible is configured through properties in the <text style="color:DodgerBlue;">apmia_ansible/ansible.cfg<text> file. You can modify the default values if needed.</p>
+<ol>
+<li><b>inventory</b></li>
+Default: host_vars/apmia_hosts
+Description: The path to the Ansible inventory. For more information about the inventory, see <a href="https://docs.ansible.com/ansible/latest/user_guide/intro_inventory.html">Working with Inventory</a> in the Ansible documentation.
+<li><b>forks</b></li>
+Default: 100
+Description: Specifies how many hosts are configured by Ansible in parallel.
+<li><b>callback_plugins</b></li>
+Default: plugins/callback
+Description: The path to the callback plug-ins script folder.
+<li><b>stdout_callback</b></li>
+Default: apmia_console_handler.py
+Description: The path to the stdout_callback script. The script handles console display and log management.
+<li><b>host_key_checking</b></li>
+Default: False
+Description: If a host is reinstalled and has a different key in the known_hosts list, this results in an error message until it is corrected. If a host is not initially in the known_hosts list, you are prompted for confirmation of the key. When running Ansible from cron, for example, this interactive procedure might be impractical.
+<li><b>transport</b></li>
+Default: smart
+Description: The default transport option, ‘smart’, uses ‘ssh’ (OpenSSH based) if the local operating system is new enough to support ControlPersist technology. Otherwise it uses ‘paramiko’. Other transport options include ‘local’, ‘chroot’, and ‘jail'.
+<li><b>log_path</b></li>
+Default: apmia_ansible.log
+Description: Enables logging and sets the path to the log file. By default, apmia_ansible.log is created in the current directory.
+<li><b>system_warnings</b></li>
+Default: True
+Description: By default, system-related warnings from the playbook are displayed on the console.
+<li><b>fact_caching</b></li>
+Default: memory
+Description: When a fact cache is enabled and there is valid data for a host, Ansible will use that rather than running an implicit setup job on a remote host. The value of this option should be the name of a cache plug-in. Current versions of Ansible include 'redis' and 'jsonfile'.
+<li><b>retry_files_enabled</b></li>
+Default: False
+Description: Specifies whether a failed Ansible playbook should create a .retry file.
+<li><b>timeout</b></li>
+Default: 10
+Description: Specifies the SSH timeout in seconds.
+
+</ol>
+</body>
+</html>
