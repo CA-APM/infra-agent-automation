@@ -1,0 +1,34 @@
+#########################################################################
+#Through updated CSV file, ansible script will generate usable entry for ansible itself in 'host_vars/apmia_hosts' file. So be ensure to not delete 'host_vars/apmia_hosts' file.
+#######################################################################
+#Sample csv file entry
+###########################################################################################################################################
+#hosts,ansible_user,ansible_password,ansible_sudo_pass,ansible_port,ansible_connection,ansible_winrm_server_cert_validation,install_only,need_IA_backup,need_extension_backup
+#
+#
+#host -------------------------------------> Hostname or machine name
+#ansible_user -----------------------------> It could be root or sudouser
+#ansible_password ------------------------->	Password of machine
+#ansible_sudo_pass ------------------------>	This parameter is applicable only for Linux.If user want to login with sudo user then user need to provide the sudo password as well .
+#ansible_port ----------------------------->	This parameter is applicable for both platform. Here We are using 'winrm' module for windows and this module works on 5986 port .Similarly for linux by default  it is using 22 port for SSH.
+#ansible_winrm_server_cert_validation ----->	This parameter is applicable for windows  Suppose  server -client is using certificate base authentication  and user want to validate the certificate then make it Yes .Default value is 'No'
+#install_only ----------------------------->	Yes/No or blank .If user put 'Yes' that means only install the service(s) and Service would not start. 'No' and 'blank 'means user doesn't want to use this option and it work with default behaviour mean install and start the services
+#need_IA_backup --------------------------->	This parameters is applicable for both platform. 'Yes' means backup file is created inside the config folder('/apmia/core/config') and 'No' means backup file is not created.
+#need_extension_backup -------------------->	This parameters is applicable for both platform .'Yes' means backup file is created inside the extension folder('apmia/extensions') and 'No' means backup file is not created.
+#
+##########################################################################################################################################
+#######################################################################
+#Sample csv file entry for Linux
+#######################################################################
+#hostname,root,password,sudo_password,22,,,yes,yes,yes
+#hostname,root,password,,,,,yes,no,no
+#hostname,root,password,,,,,no,yes,no
+#hostname,root,password,,,,,,,
+#######################################################################
+#######################################################################
+#Sample csv file entry for windows
+#######################################################################
+#hostname,administrator,password,,5986,winrm,ignore,yes,yes,yes
+#hostname,administrator,password,,5986,winrm,ignore,,,
+#hostname,administrator,password,,5986,winrm,ignore,no,,yes
+#######################################################################

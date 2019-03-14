@@ -1,0 +1,70 @@
+#- name: including path to copy dotnet msi
+#  include_vars: ../vars/dotnet_variables.yml
+
+#- name: including variable as argument
+#  include_vars: ../vars/variables.yml
+
+- block:
+    - name: Copying dotnet installer msi to remote machine
+      win_copy:
+        src: "{{ playbook_dir }}/roles/dotnet/files/NET_v1.zip"
+        dest: "{{ path_dotnet }}\\"
+      register: copy_dotnet_installer_msi
+
+    - name: Unzip dotnet installer file
+      win_unzip:
+        src: "{{ path_dotnet }}\\NET_v1.zip"
+        dest: "{{ path_dotnet }}\\"
+      register: extract_dotnet_installer
+
+    - win_file:
+        path: "{{ INSTALLDIR }}"
+        state: directory
+
+    - name: triggering dotnet agent installation command
+      win_package:
+        path: "{{ path_dotnet }}\\dotnetagent\\IntroscopeDotNetAgentInstall64.msi"
+        arguments: 'INSTALLDIR="{{ INSTALLDIR }}" EMHOST={{ EMHOST }} EMPORT={{ EMPORT }} ENABLECD={{ ENABLECD }} CDAGENTID={{ CDAGENTID }} ENABLESPP={{ ENABLESPP }} INSTALLSPMONITOR={{ INSTALLSPMONITOR }} IS_NET_API_LOGON_USERNAME={{ IS_NET_API_LOGON_USERNAME }} IS_NET_API_LOGON_PASSWORD={{ IS_NET_API_LOGON_PASSWORD }}'
+        wait: yes
+      register: installation_status
+      failed_when: false
+
+    - block:
+        - win_copy:
+             src: dotnet_agent_status.bat
+             dest: "{{ path_dotnet }}\\"
+          register: status_script_copy
+
+        - name: dotnet agent status
+          win_command: dotnet_agent_status.bat
+          args:
+             chdir: "{{ path_dotnet }}\\"
+          register: dotnet_agent_status
+        - set_fact:
+             installed_path: "{{ dotnet_agent_status.stdout_lines[2] | regex_replace('PerfMonCollectorAgent.exe.*$', '') }}"
+        - win_file:
+             path: "{{ path_dotnet }}\\dotnet_agent_status.bat"
+             state: absent
+        - set_fact:
+             report: {"stdout": "dotnet agent is already installed at {{ installed_path }}"}
+      when: installation_status.changed == false
+    - block:
+        - set_fact:
+             report: {"stdout": "dotnet agent installed successfully at {{ INSTALLDIR }}"}
+      when: installation_status.changed == true
+        
+        #- name: Restart IIS service
+       #  win_service:
+        #    name: Iisadmin
+        #    state: restarted
+        #  register: iis_status
+
+#####################################################################################################################
+- name: Block for Report
+  block:
+    # Generating report on behalf of jinja2 template
+    - template:
+         src: "{{ playbook_dir }}/roles/dotnet/templates/report.j2"
+         dest: "{{ playbook_dir }}/report.log"
+      delegate_to: localhost
+############################################################################################################

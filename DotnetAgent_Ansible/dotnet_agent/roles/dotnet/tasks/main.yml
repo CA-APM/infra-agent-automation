@@ -1,0 +1,61 @@
+- name: including path to copy dotnet msi
+  include_vars: ../vars/dotnet_variables.yml
+
+#- name: including variable as argument
+#  include_vars: ../vars/variables.yml
+
+########################################### Display the list of all commands ###########################################
+- pause:
+    prompt: "\nSelect From Below Options:\n 1. install                   ------> This command installs dotnet agent \n 2. uninstall                 ------> This command uninstall dotnet agent\n 3. configure                 ------> This command configure dotnet agent properties\n 4. start_IIS                 ------> This command use to start IIS server\n 5. stop_IIS                  ------> This command stop IIS server\n 6. restart_IIS               ------> This command restart IIS server\n 7. exit                      ------> This command use to Exit from Play.\n\nPlease Enter Your Choice"
+  register: selected_option
+  run_once: true
+############################################################################################################################################
+####################################### Exit if user enter incorrect input###############################################
+- block:
+   - debug:
+       msg: "Please select valid Option from above list ( for example: install)"
+   - meta: end_play
+  when: ( selected_option.user_input != "install" ) and ( selected_option.user_input != "uninstall" ) and ( selected_option.user_input != "configure" ) and ( selected_option.user_input != "start_IIS" ) and ( selected_option.user_input != "stop_IIS" )and ( selected_option.user_input != "restart_IIS" ) and ( selected_option.user_input|lower != "exit" ) and ( selected_option.user_input|lower != "1" ) and ( selected_option.user_input|lower != "2" ) and ( selected_option.user_input|lower != "3" ) and ( selected_option.user_input|lower != "4" ) and ( selected_option.user_input|lower != "5" ) and ( selected_option.user_input|lower != "6" ) and ( selected_option.user_input|lower != "7" )
+  run_once: true
+############################################################################################################################################
+
+####################################### Exit from play###############################################
+- block:
+    - debug:
+        msg: "Exiting from Play..."
+    - meta: end_play
+  when: selected_option.user_input|lower == "exit" or selected_option.user_input == "7"
+  run_once: true
+####################################################################################################
+
+################################ Set Fact of command name on numeric selection ################################
+- set_fact:
+     selected_option: {"user_input":"install"}
+  when: selected_option.user_input == "1"
+- set_fact:
+     selected_option: {"user_input":"uninstall"}
+  when: selected_option.user_input == "2"
+- set_fact:
+     selected_option: {"user_input":"configure"}
+  when: selected_option.user_input == "3"
+- set_fact:
+     selected_option: {"user_input":"start_IIS"}
+  when: selected_option.user_input  == "4"
+- set_fact:
+     selected_option: {"user_input":"stop_IIS"}
+  when: selected_option.user_input == "5"
+- set_fact:
+     selected_option: {"user_input":"restart_IIS"}
+  when: selected_option.user_input == "6"
+##############################################################################################
+
+- name: Writing command name to temp file
+  copy:
+     content: "{{ selected_option.user_input }}"
+     dest: "{{ playbook_dir }}/comment_temp"
+  run_once: true
+  delegate_to: localhost
+
+- setup: #setup task to gather facts of remote machine
+- include_tasks: "{{ selected_option.user_input }}.yml" # calling script as per user input
+

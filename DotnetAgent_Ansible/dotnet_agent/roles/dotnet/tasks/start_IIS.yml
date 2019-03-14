@@ -1,0 +1,20 @@
+- name: Restart IIS service
+  win_service:
+    name: Iisadmin
+    state: started
+  register: iis_start
+#########################################################################
+- set_fact:
+     report: {"stdout": "IIS service is started"}
+  when: iis_start.state == "running"
+- set_fact:
+     report: {"stdout":"IIS service could not started, please check manually"}
+  when: iis_start.state != "running"
+######################################################################################
+- name: Block for Report
+  block:
+    - template:
+         src: "{{ playbook_dir }}/roles/dotnet/templates/report.j2"
+         dest: "{{ playbook_dir }}/report.log"
+      delegate_to: localhost
+#################################################################################################

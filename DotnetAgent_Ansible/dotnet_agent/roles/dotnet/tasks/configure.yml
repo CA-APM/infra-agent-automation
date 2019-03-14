@@ -1,0 +1,41 @@
+- win_stat:
+     path: "{{ INSTALLDIR }}\\wily\\IntroscopeAgent.profile"
+  register: status_of_interscope_file
+- stat:
+     path: "{{ playbook_dir }}/user_input/configure.property"
+  register: status_of_property_file
+  delegate_to: localhost
+- block:
+    ## Adding Credential to InterscopeAgent.profile
+    - win_lineinfile:
+          path: "{{ INSTALLDIR }}\\wily\\IntroscopeAgent.profile"
+          regexp: '^{{ item.split("=")[0] }}'
+          line: "{{ item }}"
+          backup: yes
+      with_lines: "cat {{ playbook_dir }}/user_input/configure.property"
+      register: agentmanager_credential_changed
+      failed_when: false
+    - set_fact:
+         report: {"stdout":"Propertie(s) {{ item }} have updated"}
+      with_lines: "cat {{ playbook_dir }}/user_input/configure.property"
+  when: status_of_interscope_file.stat.exists == true and status_of_property_file.stat.exists == true
+- set_fact:
+     report: {"stdout":"IntroscopeAgent.profile file not exist/dotnet agent is not installed at path {{ INSTALLDIR }}\\wily\\"}
+  when: status_of_interscope_file.stat.exists == false
+- set_fact:
+     report: {"stdout":"configure.property file not exists at location {{ playbook_dir }}/user_input/"}
+  when: status_of_property_file.stat.exists == false
+- name: Restart IIS service
+  win_service:
+    name: Iisadmin
+    state: restarted
+  register: iis_restarted
+
+########################################################################################
+- name: Block for Report
+  block:
+    - template:
+         src: report.j2
+         dest: "{{ playbook_dir }}/report.log"
+      delegate_to: localhost
+######################################################################################

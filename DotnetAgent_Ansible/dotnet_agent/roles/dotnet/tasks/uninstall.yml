@@ -1,0 +1,20 @@
+- name: triggering dotnet agent installation command
+  win_package:
+    path: "{{ path_dotnet }}\\dotnetagent\\IntroscopeDotNetAgentInstall64.msi"
+    state: absent
+    wait: yes
+  register: uninstallation_status
+- set_fact:
+     report: {"stdout":"dotnet agent uninstalled successfully"}
+  when: uninstallation_status.changed == true
+- set_fact:
+     report: {"stdout":"dotnet agent not installed"}
+  when: uninstallation_status.changed == false
+################################################################################
+- name: Block for Report
+  block:
+    - template:
+         src: report.j2
+         dest: "{{ playbook_dir }}/report.log"
+      delegate_to: localhost
+################################################################################

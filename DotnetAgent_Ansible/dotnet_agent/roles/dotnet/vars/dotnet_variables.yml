@@ -1,0 +1,11 @@
+path_dotnet: "C:\\copy_dotnet\\"
+INSTALLDIR: "C:\\dotnetagent"
+EMHOST: localhost
+EMPORT: 5001
+ENABLECD: 0
+CDAGENTID:
+ENABLESPP: 0
+INSTALLSPMONITOR: 0
+IS_NET_API_LOGON_USERNAME: abcd
+IS_NET_API_LOGON_PASSWORD: abcd
+
