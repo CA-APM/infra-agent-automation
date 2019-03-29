@@ -15,6 +15,10 @@
       win_stat:
         path: "{{ path_win }}\\apmia"
       register: st_win_dir
+    - name: Checking whether apmia directory is present or not at specified location
+      win_stat:
+        path: "{{ path_win }}\\apmia\\APMIACtrl.bat"
+      register: st_win_script
 
     - name: Calling master installer script for clean uninstall
       win_command: APMIACtrl.bat clean_uninstall
@@ -22,14 +26,21 @@
         chdir: "{{ path_win }}\\apmia\\"
       register: outp_win
       ignore_errors: yes
-      when: st_win_dir.stat.exists == true
+      when: st_win_script.stat.exists == true
+    - block:
+        - set_fact:
+             outp_win: '{"stdout": "apmia directory not present/corrupted APMIA installed at path {{ path_win }}"}'
+        - set_fact:
+             outp_win: "{{ outp_win | from_json }}"
+      when: outp_win.skipped is defined
     - block:
         - name: Removing apmia folder after Clean uninstall
           win_file:
             path: "{{ path_win }}\\apmia\\"
             state: absent
           ignore_errors: yes
-          when: "'not installed/corrupt installation is present/APM' not in outp_win.stdout"
+          failed_when: false
+          when: outp_win.skipped is not defined and "'not installed/corrupt installation is present/APM' not in outp_win.stdout"
       when: st_win_dir.stat.exists == true
   when: ansible_os_family == "Windows" # Condition Check for windows
 #################################################################################################
