@@ -152,8 +152,14 @@
       register: apmia_service_status
       when: st_win_script.stat.exists == true
 
+    - name: Checking whether apmia master installer script is present or not
+      win_stat:
+         path: "{{ path_win }}\\apmia\\core\\config\\IntroscopeAgent.profile"
+      register: introscope_file_status
+
     - block:
       ############################# Adding 'agentManager.url.1' value to IntroscopeAgent.profile ############################
+
         - win_lineinfile:
             path: "{{ path_win }}\\apmia\\core\\config\\IntroscopeAgent.profile"
             regexp: '^agentManager.url.1='
@@ -177,6 +183,7 @@
               delegate_to: localhost
               when: agentmanager_url_1_changed is defined and agentmanager_url_1_changed.skipped is defined
           when: interscope_property.user_input|lower is search( '^yes$|^y$' )
+      when: introscope_file_status.stat.exists == true
         #######################################################################################################################
     
         ################################# Adding 'introscope.agent.extensions.bundles.load' value to Extensions.profile ####################
@@ -348,6 +355,11 @@
         chdir: "{{ path_linux }}/apmia/"
       register: apmia_service_status
       when: st_linux_script.stat.exists == true
+    - name: Checking whether apmia master installer script is present or not
+      stat:
+        path: "{{ path_linux }}/apmia/core/config/IntroscopeAgent.profile"
+      register: introscope_file_status_linux
+
 
     - block:
         ######### Adding 'introscope.agent.extensions.bundles.load' value to Extensions.profile ########
@@ -375,6 +387,7 @@
               delegate_to: localhost
               when: agentmanager_url_1_changed is defined and agentmanager_url_1_changed.skipped is defined
           when: interscope_property.user_input|lower is search( '^yes$|^y$' ) and found_files.matched != 0
+      when: introscope_file_status_linux.stat.exists == true
           #run_once: true
         #################################################################################
      
