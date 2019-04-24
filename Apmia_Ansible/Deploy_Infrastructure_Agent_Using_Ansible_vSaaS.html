@@ -45,14 +45,14 @@ If the client computer you want to orchestrate runs a Windows operating system, 
 
 <p style="color:DodgerBlue;">yum install python-pip</p>
 
-<p style="color:DodgerBlue;">pip install winpyrm</p>
+<p style="color:DodgerBlue;">pip install winpyrm/pip install pywinrm (In some versions of Unix pywinrm works)</p>
 </p>
 <h3>Client Computer</h3>
 <p>No action is required on UNIX client computers. For Windows clients, you must meet the setup requirements detailed at <a href="https://docs.ansible.com/ansible/latest/user_guide/windows_setup.html">Setting Up a Windows Host</a> in the Ansible Documentation.</p>
 <h2>Prepare a Host List</h2>
 <p>You provide the list of hosts you want to operate from the Control Machine in the form of a comma-separated-value (.csv) list, or by editing the <b>apmia_ansible/host_vars/apmia_hosts</b> file directly.</p>
 <h3>Use a CSV file:</h3>
-<p>Review the sample CSV file entries for UNIX and Windows in the <b>HostFile.csv.sample</b> file at <b>apmia_ansible/host_vars</b>, and use them as a reference to build your own. Each entry contains the following parameters:
+<p>Review the sample CSV file entries for UNIX and Windows in the <b>hostfile.csv.sample</b> file at <b>apmia_ansible/host_vars</b>, and use them as a reference to build your own. Each entry contains the following parameters:
 <ul>
 <li><b>host</b></li>
 Hostname
@@ -117,7 +117,7 @@ The Application Performance Management home page appears.
 <ol>
 <li>Copy the <text style="color:DodgerBlue;">apmia_ansible</text> folder to your Ansible server.</li>
 <li>Place your APMIA bundle .zip or .tar.gz file in the <text style="color:DodgerBlue;">apmia_ansible/roles/apmia_role/files/windows/ or apmia_ansible/roles/apmia_role/files/unix/</text> directory, respectively.</li>
-<li>Navigate to the <text style="color:DodgerBlue;">apmia_ansible</text> folder, for example: <text style="color:DodgerBlue;">cd apmia_ansible<p></li>
+<li>Navigate to the <text style="color:DodgerBlue;">apmia_ansible</text> folder, for example: <text style="color:DodgerBlue;">cd apmia_ansible</li>
 <li><b>Run the playbook:</b> <text style="color:DodgerBlue;"><b>ansible-playbook apmia.yml</b></text></li>
 The playbook checks for the CSV file and converts the host entries to a host list in the Ansible inventory file <text style="color:DodgerBlue;">(apmia_ansible/host_vars/apmia_hosts)</text>. Ansible then installs the dependency on each client.
 </ol>
@@ -159,6 +159,13 @@ Install the Host Monitoring extension (SysEdge)
 <li><b>config_sysedge</b></li>
 Configure the Host Monitoring configuration file (sysedge.cf)
 </ul>
+<h3>Other Commands</h3>
+<ul>
+<li><b>Exit</b></li>
+To Exit from current playbook.
+</ul>
+<h2>Logs and Reports</h2>
+<p>Report for each tasks will display on console and for logs of ansible you can check log file <b>apmia_ansible.log</b> in directory apmia_ansible</p>
 <h2>Ansible Configuration Reference</h2>
 <p>Ansible is configured through properties in the <text style="color:DodgerBlue;">apmia_ansible/ansible.cfg<text> file. You can modify the default values if needed.</p>
 <ol>
