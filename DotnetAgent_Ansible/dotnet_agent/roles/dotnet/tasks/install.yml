@@ -5,17 +5,26 @@
 #  include_vars: ../vars/variables.yml
 
 - block:
+    - name: Get zip file name
+      find:
+        paths: "{{ playbook_dir }}/roles/dotnet/files/"
+        patterns: '*.zip'
+      register: found_files
+      delegate_to: localhost
+
     - name: Copying dotnet installer msi to remote machine
       win_copy:
-        src: "{{ playbook_dir }}/roles/dotnet/files/NET_v1.zip"
+        src: "{{ found_files.files[0].path }}"
         dest: "{{ path_dotnet }}\\"
       register: copy_dotnet_installer_msi
+      when: found_files.matched != 0
 
     - name: Unzip dotnet installer file
       win_unzip:
-        src: "{{ path_dotnet }}\\NET_v1.zip"
+        src: "{{ path_dotnet }}\\{{ found_files.files[0].path | win_basename }}"
         dest: "{{ path_dotnet }}\\"
       register: extract_dotnet_installer
+      when: found_files.matched != 0
 
     - win_file:
         path: "{{ INSTALLDIR }}"
@@ -28,6 +37,13 @@
         wait: yes
       register: installation_status
       failed_when: false
+    - name: triggering dotnet agent installation command
+      win_package:
+        path: "{{ path_dotnet }}\\dotnetagent\\IntroscopeDotNetAgentInstall64.msi"
+        wait: yes
+      register: installation_status
+      failed_when: false
+      when: 
 
     - block:
         - win_copy:
