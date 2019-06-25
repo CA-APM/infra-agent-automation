@@ -1,0 +1,6 @@
+apmsso_install: /etc/ansible_test3
+server_Path: /usr/local/apache2
+apmia_host: 10.17.187.205
+epagent_httpServerPort: 8080
+epagent_networkDataPort: 8000
+caapmsso_log_path: /root/CA_APM_SSO_13.2.0/log/

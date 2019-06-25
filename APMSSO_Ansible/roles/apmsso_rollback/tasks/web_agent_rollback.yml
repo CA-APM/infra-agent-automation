@@ -1,0 +1,68 @@
+########################################## Identify Bit information of APMSSO installed ############################
+- shell: "file {{ NETE_WA_ROOT }}/bin/libIntroscopePlugin.so"
+  register: ASSO_BIT_INFO
+- set_fact:
+     ASSO_BIT: "64"
+  when: "'64-bit' in ASSO_BIT_INFO.stdout"
+- set_fact:
+     ASSO_BIT: "32"
+  when: "'32-bit' in ASSO_BIT_INFO.stdout"
+##################################################################################################################
+########################### Stoping apache server ########################################################
+- command: "./stop_httpd.sh {{ NETE_WA_ROOT }}/ca_wa_env.sh {{ server_Path }}"
+  args:
+    chdir: /tmp/
+  register: apachectl_stop
+  failed_when: false
+###############################################################################################################
+########################### Block for backup and configuration of APMSSO Agent on Remote machine ##################
+- block:
+    - copy:
+        src: "{{ apmsso_install }}/{{ CA_APM_SSO_DIRECTORY }}/backup/webagent/bin{{ ASSO_BIT }}/{{ item }}"
+        dest: "{{ NETE_WA_ROOT }}/bin/"
+        remote_src: yes
+      failed_when: false
+      with_items:
+          - libIntroscopeNativeDataAPI.so
+          - libxerces-c-3.1.so
+          - libapr-1.so.0
+          - libboost_regex-mt.so.5
+          - libicudata.so.42
+          - libicuuc.so.42
+          - libicui18n.so.42
+    - copy:
+        src: "{{ apmsso_install }}/{{ CA_APM_SSO_DIRECTORY }}/backup/webagent/config{{ ASSO_BIT }}/{{ item }}"
+        dest: "{{ NETE_WA_ROOT }}/config/"
+        remote_src: yes
+      failed_when: false
+      with_items:
+          - IntroscopeCAPIConfig.xml
+          - SiteMinderPSdefs.xml
+    - copy:
+        src: "{{ apmsso_install }}/{{ CA_APM_SSO_DIRECTORY }}/backup/webagent/WebAgent.conf"
+        dest: "{{ server_Path }}/conf/"
+        remote_src: yes
+      failed_when: false
+
+    - copy:
+        src: "{{ playbook_dir }}/roles/apmsso_role/files/start_httpd.sh"
+        dest: /tmp/
+        mode: 0777
+    - command: "./start_httpd.sh {{ NETE_WA_ROOT }}/ca_wa_env.sh {{ server_Path }}"
+      args:
+        chdir: /tmp/
+      register: service_apache_status
+    - file:
+        state: absent
+        path: "{{ item }}"
+      with_items:
+          - /tmp/start_httpd.sh
+    - set_fact:
+         report_output: {"stdout":"APM SSO Rolled back to previous verison"}
+##########################################Tasks to generate Report###################################################################
+#- block:
+#    - template:
+#         src: "{{ playbook_dir }}/roles/apmsso_role/template/report.j2"
+#         dest: "{{ playbook_dir }}/report.log"
+#      delegate_to: localhost
+#############################################################################################################################################

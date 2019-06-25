@@ -1,0 +1,28 @@
+{% for item in csvfile.split("\n") %}
+{% if item[0] == "#" %}
+{% else %}
+{% set list = item.split(",") %}
+{% if list|count == 0 %}
+{% elif list|count == 1 %}
+{{ list[0]|trim() }}
+{% elif list|count == 2 %}
+{{ list[0]|trim() }} ansible_user={{ list[1]|trim() if list[1] != '' else 'root' }}
+{% elif list|count == 3 %}
+{{ list[0]|trim() }} ansible_user={{ list[1]|trim() if list[1] != '' else 'root' }} ansible_password={{ list[2]|trim() }}
+{% elif list|count == 4 %}
+{{ list[0]|trim() }} ansible_user={{ list[1]|trim() if list[1] != '' else 'root' }} ansible_password={{ list[2]|trim() }} ansible_sudo_pass={{ list[3]|trim }}
+{% elif list|count == 5 %}
+{{ list[0]|trim() }} ansible_user={{ list[1]|trim() if list[1] != '' else 'root' }} ansible_password={{ list[2]|trim() }} ansible_sudo_pass={{ list[3]|trim }} apmsso_install={{ list[4]|trim }}
+{% elif list|count == 6 %}
+{{ list[0]|trim() }} ansible_user={{ list[1]|trim() if list[1] != '' else 'root' }} ansible_password={{ list[2]|trim() }} ansible_sudo_pass={{ list[3]|trim }} apmsso_install={{ list[4]|trim }} apmia_host={{ list[5]|trim }}
+{% elif list|count == 7 %}
+{{ list[0]|trim() }} ansible_user={{ list[1]|trim() if list[1] != '' else 'root' }} ansible_password={{ list[2]|trim() }} ansible_sudo_pass={{ list[3]|trim }} apmsso_install={{ list[4]|trim }} apmia_host={{ list[5]|trim }} server_Path={{ list[6]|trim }}
+{% elif list|count == 8 %}
+{{ list[0]|trim() }} ansible_user={{ list[1]|trim() if list[1] != '' else 'root' }} ansible_password={{ list[2]|trim() }} ansible_sudo_pass={{ list[3]|trim }} apmsso_install={{ list[4]|trim }} apmia_host={{ list[5]|trim }} server_Path={{ list[6]|trim }} epagent_networkDataPort={{ list[7]|trim }}
+{% elif list|count == 9 %}
+{{ list[0]|trim() }} ansible_user={{ list[1]|trim() if list[1] != '' else 'root' }} ansible_password={{ list[2]|trim() }} ansible_sudo_pass={{ list[3]|trim }} apmsso_install={{ list[4]|trim }} apmia_host={{ list[5]|trim }} server_Path={{ list[6]|trim }} epagent_networkDataPort={{ list[7]|trim }} epagent_httpServerPort={{ list[8]|trim }}
+{% elif list|count == 10 %}
+{{ list[0]|trim() }} ansible_user={{ list[1]|trim() if list[1] != '' else 'root' }} ansible_password={{ list[2]|trim() }} ansible_sudo_pass={{ list[3]|trim }} apmsso_install={{ list[4]|trim }} apmia_host={{ list[5]|trim }} server_Path={{ list[6]|trim }} epagent_networkDataPort={{ list[7]|trim }} epagent_httpServerPort={{ list[8]|trim }} caapmsso_log_path={{ list[9]|trim }}
+{% endif %}
+{% endif %}
+{% endfor %}

@@ -1,0 +1,142 @@
+########################################## Identify Bit information of APMSSO installed ############################
+- shell: "file {{ NETE_PS_ROOT }}/lib/libIntroscopeNativeDataAPI.so"
+  register: ASSO_BIT_INFO
+- set_fact:
+     ASSO_BIT: "64"
+  when: "'64-bit' in ASSO_BIT_INFO.stdout"
+- set_fact:
+     ASSO_BIT: "32"
+  when: "'32-bit' in ASSO_BIT_INFO.stdout"
+##################################################################################################################
+################################ Copy binary and librery files on remote machine #################################
+- file:
+    path: "{{ apmsso_install }}/{{ CA_APM_SSO_DIRECTORY }}"
+    state: directory
+    mode: 0755
+- copy:
+    src: "{{ playbook_dir }}/roles/apmsso_role/files/{{ CA_APM_SSO_DIRECTORY }}/{{ item }}"
+    dest: "{{ apmsso_install }}/{{ CA_APM_SSO_DIRECTORY }}/"
+  with_items:
+      - "config"
+      - "bin64"
+  when: "'64-bit' in ASSO_BIT_INFO.stdout"
+- copy:
+    src: "{{ playbook_dir }}/roles/apmsso_role/files/{{ CA_APM_SSO_DIRECTORY }}/{{ item }}"
+    dest: "{{ apmsso_install }}/{{ CA_APM_SSO_DIRECTORY }}/"
+  with_items:
+      - "config"
+      - "bin"
+  when: "'32-bit' in ASSO_BIT_INFO.stdout"
+################################################################################################################
+######################### Stoping policy server ########################################################
+- command: ./stop-all
+  args:
+    chdir: "{{ NETE_PS_ROOT }}"
+  register: policy_server_stop
+  failed_when: false
+###############################################################################################################
+######################### Block for backup and configuration of APMSSO Agent on Remote machine ##################
+- block:
+    - file:
+        path: "{{ item }}"
+        state: directory
+        mode: 0755
+      with_items:
+          - "{{ apmsso_install }}/{{ CA_APM_SSO_DIRECTORY }}/backup/siteminder/lib{{ ASSO_BIT }}"
+          - "{{ apmsso_install }}/{{ CA_APM_SSO_DIRECTORY }}/backup/siteminder/config{{ ASSO_BIT }}"
+    - copy:
+        src: "{{ NETE_PS_ROOT }}/lib/{{ item }}"
+        dest: "{{ apmsso_install }}/{{ CA_APM_SSO_DIRECTORY }}/backup/siteminder/lib{{ ASSO_BIT }}"
+        remote_src: yes
+        mode: 0775
+      failed_when: false
+      with_items:
+          - libIntroscopeNativeDataAPI.so
+          - libxerces-c-3.1.so
+          - libapr-1.so.0
+          - libboost_regex-mt.so.5
+          - libicudata.so.42
+          - libicuuc.so.42
+          - libicui18n.so.42
+    - copy:
+        src: "{{ NETE_PS_ROOT }}/config/{{ item }}"
+        dest: "{{ apmsso_install }}/{{ CA_APM_SSO_DIRECTORY }}/backup/siteminder/config{{ ASSO_BIT }}"
+        remote_src: yes
+        mode: 0775
+      failed_when: false
+      with_items:
+          - IntroscopeCAPIConfig.xml
+          - SiteMinderPSdefs.xml
+
+    - copy:
+        src: "{{ server_Path }}/conf/WebAgent.conf"
+        dest: "{{ apmsso_install }}/{{ CA_APM_SSO_DIRECTORY }}/backup/siteminder/"
+        remote_src: yes
+      failed_when: false
+    
+    - copy:
+        src: "{{ apmsso_install }}/{{ CA_APM_SSO_DIRECTORY }}/bin{{ ASSO_BIT }}/{{ item }}"
+        dest: "{{ NETE_PS_ROOT }}/lib/"
+        mode: 0775
+        remote_src: yes
+      with_items:
+          - libIntroscopeNativeDataAPI.so
+          - libxerces-c-3.1.so
+          - libapr-1.so.0
+          - libboost_regex-mt.so.5
+          - libicudata.so.42
+          - libicuuc.so.42
+          - libicui18n.so.42
+
+    - copy:
+        src: "{{ apmsso_install }}/{{ CA_APM_SSO_DIRECTORY }}/config/{{ item }}"
+        dest: "{{ NETE_PS_ROOT }}/config/"
+        mode: 0775
+        remote_src: yes
+      with_items:
+          - IntroscopeCAPIConfig.xml
+          - SiteMinderPSdefs.xml
+
+    - replace:
+         path: "{{ NETE_PS_ROOT }}/config/IntroscopeCAPIConfig.xml"
+         regexp: 'definition-file=".*."'
+         replace: 'definition-file="{{ NETE_PS_ROOT }}/config/SiteMinderPSdefs.xml"'
+    - replace:
+         path: "{{ NETE_PS_ROOT }}/config/IntroscopeCAPIConfig.xml"
+         regexp: 'name="epagent_host" value=".*."'
+         replace: 'name="epagent_host" value="{{ apmia_host }}"'
+    - replace:
+         path: "{{ NETE_PS_ROOT }}/config/IntroscopeCAPIConfig.xml"
+         regexp: 'name="epagent_httpServerPort" value=".*."'
+         replace: 'name="epagent_httpServerPort" value="{{ epagent_httpServerPort }}"'
+    - replace:
+         path: "{{ NETE_PS_ROOT }}/config/IntroscopeCAPIConfig.xml"
+         regexp: 'name="epagent_networkDataPort" value=".*."'
+         replace: 'name="epagent_networkDataPort" value="{{ epagent_networkDataPort }}"'
+    - replace:
+         path: "{{ NETE_PS_ROOT }}/config/IntroscopeCAPIConfig.xml"
+         regexp: 'name="caapmsso_log_path" value=".*."'
+         replace: 'name="caapmsso_log_path" value="{{ caapmsso_log_path }}"'
+    - command: ./start-all
+      args:
+        chdir: "{{ NETE_PS_ROOT }}"
+      register: policy_server_start
+      failed_when: false
+    - set_fact:
+         report_output: {"stdout":"APM for SSO Agent is installed and configured"}
+  when: policy_server_stop | succeeded
+  rescue:
+    - set_fact:
+         report_output: {"stdout":"There is a problem in APM for SSO configuration"}
+#######################################################################################################
+##################################### print report if facing problem to stop policy server ################### 
+- set_fact:
+     report_output: {"stdout":"Got problem in stoping policy server"}
+  when:  policy_server_stop | failed
+#########################################Tasks to generate Report###################################################################
+#- block:
+#    - template:
+#         src: ../template/report.j2
+#         dest: "{{ playbook_dir }}/report.log"
+#      delegate_to: localhost
+

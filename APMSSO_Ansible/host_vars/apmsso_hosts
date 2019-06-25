@@ -1,0 +1,2 @@
+redma11-E16753.ca.com ansible_user=root ansible_password=aW50ZXJPUEAxMjMK ansible_sudo_pass= apmsso_install=/etc/ansible_test4 apmia_host=10.80.53.64 server_Path=/usr/local/apache2 epagent_networkDataPort=8000 epagent_httpServerPort=8090 caapmsso_log_path=/root/CA_APM_SSO_13.2.0/log/
+10.162.10.235 ansible_user=root ansible_password=aW50ZXJPUEAxMjMK ansible_sudo_pass= apmsso_install=/etc/ansible_test4 apmia_host=10.80.53.64 server_Path= epagent_networkDataPort=8000 epagent_httpServerPort=8090 caapmsso_log_path=/root/CA_APM_SSO_13.2.0/log/

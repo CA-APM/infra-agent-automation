@@ -1,0 +1,22 @@
+#########################################################################
+#Through updated CSV file, ansible script will generate usable entry for ansible itself in 'host_vars/apmia_hosts' file. So be ensure to not delete 'host_vars/apmsso_hosts' file.
+#######################################################################
+#Sample csv file entry
+###########################################################################################################################################
+#hosts,ansible_user,ansible_password,ansible_sudo_pass
+#
+#
+#host -------------------------------------> Hostname or machine name
+#ansible_user -----------------------------> It could be root or sudouser
+#ansible_password ------------------------->	Password of machine
+#ansible_sudo_pass ------------------------>	This parameter is applicable only for Linux.If user want to login with sudo user then user need to provide the sudo password as well .
+#
+##########################################################################################################################################
+#######################################################################
+#Sample csv file entry for Linux
+#######################################################################
+#hostname,root,password,sudo_password
+#hostname,root,password
+#hostname,root,password,,apmsso_install,apmia_host,epagent_networkDataPort,epagent_httpServerPort,caapmsso_log_path
+#hostname,root,password,,,apmia_host,epagent_networkDataPort,epagent_httpServerPort,caapmsso_log_path
+#######################################################################

@@ -1,0 +1,76 @@
+############ Converting csv list to usable hosts file #####################
+- hosts: localhost
+  connection: local
+  gather_facts: true
+  tasks:
+    - set_fact: csvfile="{{ lookup('file', item) }}"
+      with_fileglob:
+         - "host_vars/*csv"
+    - set_fact: hosts_list="{{ lookup('file', './host_vars/apmsso_hosts') }}"  
+    - name: Parse CSV To hosts
+      template:
+        src: "roles/apmsso_role/template/hosts.j2"
+        dest: "./host_vars/apmsso_hosts"
+      run_once: true
+      delegate_to: localhost
+      when: csvfile is defined
+    - meta: refresh_inventory
+##############################################################################
+
+######## Decrypting openssl encrypted password and sudo password ############
+- name: Decrypt, if password is increpted
+  hosts: all
+  gather_facts: False
+  tasks:
+    - name: check decrypt.sh is present or not
+      stat:
+        path: "roles/apmsso_role/files/decrypt.sh"
+      run_once: true
+      delegate_to: localhost
+      register: decrypt_file_status
+    - command: sh roles/apmsso_role/files/decrypt.sh {{ item|default('') }}
+      no_log: true
+      register: decrypted_password
+      delegate_to: localhost
+      with_items:
+          - "{{ ansible_password }}"
+          - "{{ ansible_sudo_pass }}"
+      when: decrypt_file_status.stat.exists == true
+    - set_fact:
+        ansible_password: '{{ decrypted_password.results[0].stdout }}'
+      when: decrypt_file_status.stat.exists == true and decrypted_password.results[0].stdout != ''
+    - set_fact:
+        ansible_sudo_pass: '{{ decrypted_password.results[1].stdout }}'
+      when: decrypt_file_status.stat.exists == true and decrypted_password.results[1].stdout != ''
+######################################################################################
+
+########### Including apmia role ##################################################
+    - block:
+        - set_fact:
+             apmsso_install: "{{ apmsso_install }}"
+          when: apmsso_install is defined
+        - set_fact:
+             server_Path: "{{ server_Path }}"
+          when: server_Path is defined
+        - set_fact:
+             apmia_host: "{{ apmia_host }}"
+          when: apmia_host is defined
+        - set_fact:
+             epagent_httpServerPort: "{{ epagent_httpServerPort }}"
+          when: epagent_httpServerPort is defined
+        - set_fact:
+             epagent_networkDataPort: "{{ epagent_networkDataPort }}"
+          when: epagent_networkDataPort is defined
+        - set_fact:
+             caapmsso_log_path: "{{ caapmsso_log_path }}"
+          when: caapmsso_log_path is defined
+    - include_role:
+        name: apmsso_rollback
+      when: apmsso_rollback is defined and apmsso_rollback|lower is search( '^yes$|^y$|^true$' )
+    - include_role:
+        name: apmsso_role
+      when: apmsso_rollback is not defined or apmsso_rollback|lower is not search( '^yes$|^y$|^true$' )
+    - debug:
+        msg: "Please pass correct argument or left it blank. ( ansible-playbook apmsso.yml -e apmsso_rollback=true)"
+      when: apmsso_rollback is defined and apmsso_rollback|lower is not search( '^yes$|^y$|^true$' )
+#######################################################################################

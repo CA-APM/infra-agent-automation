@@ -1,0 +1,4 @@
+{% for itm in play_hosts %}
+{{ hostvars[itm]['ansible_hostname'] }} {{ hostvars[itm].environoment }} Pass{% if hostvars[itm].ansible_os_family == "RedHat" or hostvars[itm].ansible_os_family == "Debian" or hostvars[itm].ansible_os_family == "Suse" %} {{ hostvars[itm].report_output.stdout|replace("\n", "")|to_nice_json }}{{ "\n" }} {% endif %} 
+{% endfor %}
+

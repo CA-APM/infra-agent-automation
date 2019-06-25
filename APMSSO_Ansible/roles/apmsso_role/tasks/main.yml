@@ -1,0 +1,84 @@
+- setup:
+- include_vars: ../vars/variables.yml # Including variables from variables.yml file
+######################################## Block to identify environoment of APMSSO on client machine #################################
+- block:
+    - copy:
+        src: "{{ playbook_dir }}/roles/apmsso_role/files/WA_PS.sh"
+        dest: /tmp/
+        mode: 0777
+    - command: ./WA_PS.sh
+      args:
+        chdir: /tmp/
+      register: output_wa_ps_1
+    - stat:
+        path: /tmp/output.txt
+      register: output_file_status
+    - command: cat /tmp/output.txt
+      register: output_wa_ps
+      when: output_file_status.stat.exists == true
+- file:
+    path: "{{ caapmsso_log_path }}"
+    state: directory
+    mode: '0775'
+#######################################################################################################################################
+######################## Set environoment in a variable #######################################################################
+- set_fact:
+     NETE_PS_ROOT: "{{ output_wa_ps.stdout_lines[1] }}"
+  when:
+    - output_wa_ps.skipped is not defined
+    - "'NETE_PS_ROOT' in output_wa_ps.stdout_lines"
+- set_fact:
+     NETE_WA_ROOT: "{{ output_wa_ps.stdout_lines[1] }}"
+  when: 
+    - output_wa_ps.skipped is not defined
+    - "'NETE_WA_ROOT' in output_wa_ps.stdout_lines"
+##################################################################################################################
+##################################### Getting CA_APM directory name #####################################
+- find:
+    path: "{{ playbook_dir }}/roles/apmsso_role/files/"
+    file_type: directory
+  register: CA_APM_SSO_DIRECTORY
+  delegate_to: localhost
+- set_fact:
+     CA_APM_SSO_DIRECTORY: "{{ CA_APM_SSO_DIRECTORY.files[0].path | basename }}"
+###########################################################################################################
+############################# Removing temp files used in identify invironoment ###########################
+- file:
+    state: absent
+    path: "{{ item }}"
+  with_items:
+      - /tmp/output.txt
+      - /tmp/WA_PS.sh
+############################################################################################################
+################################## set fact for environoment to display in report #########################
+- set_fact:
+     environoment: "Policy_Server"
+  when: NETE_PS_ROOT is defined
+- set_fact:
+     environoment: "Web_Agent"
+  when: NETE_WA_ROOT is defined
+- set_fact:
+     environoment: "Not Found"
+  when:
+    - NETE_PS_ROOT is not defined
+    - NETE_WA_ROOT is not defined
+###########################################################################################################
+############################# set fact for output message if both environoment not found #################
+- set_fact:
+     report_output: {"stdout":"Web Agent or Policy Server Must be configured."}
+  when: 
+    - NETE_WA_ROOT is not defined
+    - NETE_PS_ROOT is not defined
+#####################################################################################################
+######################### Calling file for further configuration according to environoment ###############
+- include_tasks: "web_agent.yml"
+  when: NETE_WA_ROOT is defined
+- include_tasks: "policy_server.yml"
+  when: NETE_PS_ROOT is defined
+########################################################################################################
+- block:
+    - template:
+         src: ../template/report.j2
+         dest: "{{ playbook_dir }}/report.log"
+      delegate_to: localhost
+
