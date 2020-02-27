@@ -463,7 +463,7 @@
       args:
         chdir: "{{ path_linux }}/apmia/"
       register: output_stop
-      when: install_only|lower == "yes" and outp_linux.skipped is not defined and 'is running' not in outp_linux.stdout and found_files.matched != 0
+      when: install_only|lower == "yes" and outp_linux.skipped is not defined and 'is running' not in outp_linux.stdout and found_files.matched != 0 and 'APMIA is already installed' not in outp_linux.stdout
     - block:
         - name: Calling master installer script to check status of apmia service
           command: ./APMIACtrl.sh status
