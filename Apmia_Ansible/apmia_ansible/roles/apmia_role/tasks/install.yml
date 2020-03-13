@@ -21,7 +21,7 @@
 - name: Introscope property
   block:
     - pause:
-        prompt: "Do you want to add CA APM EM url ('agentManager.url.1') (Y/N) ? --> On selection of 'No', it will take default value localhost:8081"
+        prompt: "Do you want to add CA APM EM url ('agentManager.url.1') (Y/N) ? --> On selection of 'No', it will pick existing value"
       register: interscope_property
       run_once: true
       until: interscope_property.user_input|lower is search( '^yes$|^y$|^no$|^n' )

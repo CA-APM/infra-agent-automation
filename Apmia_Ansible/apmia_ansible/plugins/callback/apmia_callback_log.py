@@ -188,8 +188,8 @@ class CallbackModule(CallbackBase):
     def v2_playbook_on_no_hosts_matched(self):
         t5 = threading.Thread(target=print_star, args=("start",))
        	t5.start()
-        self._display.display("skipping: no hosts matched", color=C.COLOR_SKIP)
-	f.writelines("%s-----skipping: no hosts matched\n" % (datetime.now()))
+        self._display.display("\nskipping: no hosts matched. You can configure hosts at location 'host_vars' either by adding hosts to apmia_hosts or uploading hosts as csv file.", color=C.COLOR_SKIP)
+	f.writelines("\n%s-----skipping: no hosts matched. You can configure hosts at location 'host_vars' either by adding hosts to apmia_hosts or uploading hosts as csv file.\n" % (datetime.now()))
         t5 = threading.Thread(target=print_star, args=("stop",))
 
     def v2_playbook_on_no_hosts_remaining(self):

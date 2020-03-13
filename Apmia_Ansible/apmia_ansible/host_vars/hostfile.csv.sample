@@ -20,15 +20,15 @@
 #######################################################################
 #Sample csv file entry for Linux
 #######################################################################
-#hostname,root,password,sudo_password,22,,,no,yes,yes
+#hostname,root,password,sudo_password,22,,,no,no,no
 #hostname,root,password,,,,,no,no,no
-#hostname,root,password,,,,,no,yes,no
+#hostname,root,password,,,,,no,no,no
 #hostname,root,password,,,,,,,
 #######################################################################
 #######################################################################
 #Sample csv file entry for windows
 #######################################################################
-#hostname,administrator,password,,5986,winrm,ignore,no,yes,yes
+#hostname,administrator,password,,5986,winrm,ignore,no,no,no
 #hostname,administrator,password,,5986,winrm,ignore,,,
-#hostname,administrator,password,,5986,winrm,ignore,no,,yes
+#hostname,administrator,password,,5986,winrm,ignore,no,,no
 #######################################################################
